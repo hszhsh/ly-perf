@@ -1,0 +1,4 @@
+node_modules
+.rspack
+dist
+release

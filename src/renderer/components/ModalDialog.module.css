@@ -94,7 +94,11 @@
 .dangerAction {
   color: #ffd5d5;
   border-color: rgba(239, 83, 80, 0.58);
-  background: linear-gradient(180deg, rgba(181, 64, 64, 0.3), rgba(110, 34, 34, 0.18));
+  background: linear-gradient(
+    180deg,
+    rgba(181, 64, 64, 0.3),
+    rgba(110, 34, 34, 0.18)
+  );
 }
 
 @media (max-width: 640px) {

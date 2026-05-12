@@ -58,6 +58,13 @@
   color: #d8e3f0;
 }
 
+.sessionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .sessionMeta {
   font-size: 11px;
   color: #8fa2b8;
@@ -80,6 +87,13 @@
 
 .detailHeader h3 {
   margin: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .detailHeader p {
@@ -110,6 +124,29 @@
 
 .errorMessage {
   color: #fda4af;
+}
+
+.recoveryNotice {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 184, 77, 0.35);
+  background: linear-gradient(
+    135deg,
+    rgba(86, 49, 7, 0.36),
+    rgba(52, 30, 8, 0.26)
+  );
+}
+
+.recoveryNotice strong {
+  font-size: 13px;
+  color: #ffe4bf;
+}
+
+.recoveryNotice span {
+  font-size: 12px;
+  color: #f4cf9b;
 }
 
 .dangerButton {

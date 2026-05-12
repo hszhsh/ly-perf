@@ -3,10 +3,12 @@ description: "Use when editing TypeScript under src/main or src/shared, especial
 name: "Main And Shared Guidelines"
 applyTo: ["src/main/**/*.ts", "src/shared/**/*.ts"]
 ---
+
 # Main And Shared Guidelines
 
 - Keep process boundaries explicit: main-process code owns ADB, filesystem, and Electron APIs; renderer-facing contracts belong in `src/shared` and flow through preload plus IPC.
 - When adding or changing a renderer-to-main capability, update shared IPC channels and shared types as part of the same change.
+- Use 4-space indentation for `.ts` files covered by this instruction.
 - Prefer root-cause fixes and coherent structural changes over small local patches when working in monitor, session, or report services.
 - Treat metric collection code as performance-sensitive: avoid repeated expensive shell scans inside hot sampling paths, prefer batching related probes, and preserve existing non-blocking patterns.
 - Maintain strong typing across service, IPC, and renderer boundaries; avoid ad-hoc payload shapes when a shared type should exist.

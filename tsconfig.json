@@ -21,5 +21,10 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": ["src", "rspack.renderer.config.ts", "rspack.main.config.ts", "babel.config.cjs"]
+  "include": [
+    "src",
+    "rspack.renderer.config.ts",
+    "rspack.main.config.ts",
+    "babel.config.cjs"
+  ]
 }

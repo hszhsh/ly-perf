@@ -23,3 +23,4 @@
 
 - Keep renderer-main communication typed with shared channel/constants and shared types.
 - Match the existing TypeScript and React style already used in the repo before introducing new patterns.
+- Use 4-space indentation for `.ts` and `.tsx` files in this repository.

@@ -12,6 +12,9 @@
     "build": "npm run clean && npm run build:renderer && npm run build:main",
     "build:renderer": "cross-env NODE_ENV=production rspack build --config rspack.renderer.config.ts",
     "build:main": "cross-env NODE_ENV=production rspack build --config rspack.main.config.ts",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\" \".github/**/*.md\" \".prettierrc.json\" \"rspack.*.ts\" \"eslint.config.mjs\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\" \".github/**/*.md\" \".prettierrc.json\" \"rspack.*.ts\" \"eslint.config.mjs\"",
     "dist": "npm run build && electron-builder --win",
     "typecheck": "tsc --noEmit"
   },
@@ -64,6 +67,7 @@
     "@babel/preset-env": "^7.29.5",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
+    "@eslint/js": "^10.0.1",
     "@rspack/cli": "^2.0.2",
     "@rspack/core": "^2.0.2",
     "@rspack/dev-server": "^2.0.1",
@@ -80,12 +84,17 @@
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
     "electronmon": "^2.0.4",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.6.0",
     "html-rspack-plugin": "^6.1.8",
     "nodemon": "^3.1.14",
+    "prettier": "^3.8.3",
     "react-refresh": "^0.18.0",
     "rimraf": "^6.1.3",
     "style-loader": "^4.0.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.3",
     "wait-on": "^9.0.5"
   }
 }
