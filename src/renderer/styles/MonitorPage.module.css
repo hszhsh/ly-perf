@@ -1,0 +1,304 @@
+.page {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 12px;
+}
+
+.sidebar,
+.content,
+.section,
+.preview {
+  border: 1px solid rgba(121, 151, 181, 0.28);
+  border-radius: 12px;
+  background: rgba(11, 18, 28, 0.75);
+}
+
+.sidebar {
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section {
+  padding: 10px;
+}
+
+.section h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+}
+
+.kvList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kvList div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kvList span {
+  color: #90a4ba;
+  font-size: 11px;
+}
+
+.kvList strong {
+  font-size: 12px;
+}
+
+.path {
+  word-break: break-all;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.select,
+.input {
+  width: 100%;
+}
+
+.appSelector {
+  flex: 1;
+  min-width: 0;
+}
+
+.selectorAction {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.infoTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.infoTable td {
+  border-bottom: 1px solid rgba(102, 131, 159, 0.22);
+  padding: 5px 0;
+}
+
+.infoTable td:first-child {
+  color: #91a4b9;
+  width: 72px;
+}
+
+.tip {
+  margin: 8px 0 0;
+  color: #f4d8a0;
+  font-size: 11px;
+}
+
+.formGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #9eb0c5;
+}
+
+.checkboxLabel {
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+}
+
+.status {
+  margin: 8px 0 0;
+  color: #8fb0ce;
+  font-size: 12px;
+}
+
+.error {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: #ff9c9a;
+  background: rgba(80, 20, 20, 0.45);
+  border: 1px solid rgba(214, 92, 92, 0.45);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.debugGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.debugGrid div {
+  display: grid;
+  gap: 2px;
+}
+
+.debugGrid span {
+  color: #8fa2b8;
+  font-size: 11px;
+}
+
+.debugGrid strong {
+  font-size: 12px;
+}
+
+.debugNote {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #9ab4ce;
+}
+
+.debugWarn {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #f6c57a;
+}
+
+.candidateList {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.candidateItem {
+  border: 1px solid rgba(115, 145, 174, 0.24);
+  border-radius: 8px;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  background: rgba(9, 15, 23, 0.45);
+}
+
+.candidateTitle {
+  font-size: 11px;
+  color: #dbe7f6;
+}
+
+.candidateMeta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #8fa2b8;
+}
+
+.capabilityBlock {
+  margin-top: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.capabilityBlock h4 {
+  margin: 0;
+  font-size: 12px;
+  color: #d8e3f0;
+}
+
+.adapterRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  border-bottom: 1px dashed rgba(115, 145, 174, 0.2);
+  padding-bottom: 4px;
+}
+
+.adapterName {
+  color: #8fa2b8;
+}
+
+.adapterSelected {
+  color: #9ce39a;
+}
+
+.content {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  gap: 12px;
+  padding: 10px;
+}
+
+.networkSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.summaryCard {
+  border: 1px solid rgba(121, 151, 181, 0.28);
+  border-radius: 12px;
+  background: rgba(8, 14, 23, 0.78);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.summaryCard span {
+  color: #8ea1b7;
+  font-size: 11px;
+}
+
+.summaryCard strong {
+  font-size: 18px;
+  color: #eff6ff;
+}
+
+.summaryCard small {
+  color: #7f97b1;
+  font-size: 11px;
+}
+
+.charts {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow: auto;
+}
+
+.preview {
+  padding: 10px;
+}
+
+.preview h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.previewImage {
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid rgba(115, 145, 174, 0.35);
+  background: rgba(7, 12, 19, 0.9);
+}
+
+.placeholder {
+  margin: 6px 0;
+  color: #8fa2b8;
+  font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    max-height: 45vh;
+  }
+}

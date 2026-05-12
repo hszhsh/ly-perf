@@ -1,0 +1,8 @@
+node_modules/
+.rspack/
+release/
+dist/
+*.log
+perf-data/
+.DS_Store
+Thumbs.db

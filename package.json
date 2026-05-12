@@ -1,0 +1,91 @@
+{
+  "name": "ly-perf",
+  "version": "0.1.0",
+  "description": "Android performance monitor desktop client built with Electron + React + TypeScript + Rspack",
+  "main": ".rspack/main/main.js",
+  "scripts": {
+    "start": "concurrently -k -n RENDERER,MAIN,ELECTRON -c blue,green,magenta \"npm run dev:renderer\" \"npm run dev:main\" \"npm run dev:electron\"",
+    "dev:renderer": "cross-env NODE_ENV=development DEV_SERVER_PORT=3173 rspack serve --config rspack.renderer.config.ts",
+    "dev:main": "cross-env NODE_ENV=development rspack build --watch --config rspack.main.config.ts",
+    "dev:electron": "wait-on http://localhost:3173 .rspack/main/main.js && cross-env ELECTRON_RENDERER_URL=http://localhost:3173 nodemon --watch .rspack/main --ext js --exec \"electron .\"",
+    "clean": "rimraf .rspack dist release",
+    "build": "npm run clean && npm run build:renderer && npm run build:main",
+    "build:renderer": "cross-env NODE_ENV=production rspack build --config rspack.renderer.config.ts",
+    "build:main": "cross-env NODE_ENV=production rspack build --config rspack.main.config.ts",
+    "dist": "npm run build && electron-builder --win",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "rspack",
+    "adb",
+    "performance"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.ly.perf",
+    "productName": "LY Perf",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      ".rspack/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/adb/win32",
+        "to": "adb/win32",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  },
+  "dependencies": {
+    "echarts": "^6.0.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.5",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "@rspack/cli": "^2.0.2",
+    "@rspack/core": "^2.0.2",
+    "@rspack/dev-server": "^2.0.1",
+    "@rspack/plugin-react-refresh": "^2.0.0",
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "babel-loader": "^10.1.1",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "concurrently": "^9.2.1",
+    "copyfiles": "^2.4.1",
+    "cross-env": "^10.1.0",
+    "css-loader": "^7.1.4",
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
+    "electronmon": "^2.0.4",
+    "html-rspack-plugin": "^6.1.8",
+    "nodemon": "^3.1.14",
+    "react-refresh": "^0.18.0",
+    "rimraf": "^6.1.3",
+    "style-loader": "^4.0.0",
+    "typescript": "^6.0.3",
+    "wait-on": "^9.0.5"
+  }
+}
