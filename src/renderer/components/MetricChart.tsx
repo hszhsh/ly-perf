@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
-import * as echarts from "echarts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ECharts } from "echarts";
 import type { MetricName, MonitorSample } from "@shared/types";
+import { loadEcharts } from "@renderer/utils/loadEcharts";
 
 export interface MetricSeries {
     name: string;
@@ -28,7 +29,7 @@ function formatTime(timestamp: number): string {
 }
 
 function getVisibleSampleRange(
-    chart: echarts.ECharts,
+    chart: ECharts,
     sampleCount: number
 ): { startIndex: number; endIndex: number } {
     if (sampleCount <= 0) {
@@ -55,8 +56,12 @@ function getVisibleSampleRange(
 }
 
 export function MetricChart(props: MetricChartProps) {
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<HTMLDivElement | null>(null);
-    const instanceRef = useRef<echarts.ECharts | null>(null);
+    const instanceRef = useRef<ECharts | null>(null);
+    const [runtimeState, setRuntimeState] = useState<
+        "loading" | "ready" | "error"
+    >("loading");
 
     const option = useMemo(() => {
         const labels = props.samples.map((sample) =>
@@ -154,63 +159,126 @@ export function MetricChart(props: MetricChartProps) {
             return;
         }
 
-        if (!instanceRef.current) {
-            instanceRef.current = echarts.init(chartRef.current);
-        }
+        let disposed = false;
+        let cleanup = () => {};
 
-        if (props.syncGroup) {
-            instanceRef.current.group = props.syncGroup;
-            echarts.connect(props.syncGroup);
-        }
+        void (async () => {
+            try {
+                const echarts = await loadEcharts();
 
-        instanceRef.current.setOption(option);
+                if (disposed || !chartRef.current) {
+                    return;
+                }
 
-        const chart = instanceRef.current;
-        const notifyVisibleRange = () => {
-            const range = getVisibleSampleRange(chart, props.samples.length);
-            props.onVisibleRangeChange?.(range.startIndex, range.endIndex);
-        };
-        const handleAxisPointerUpdate = (event: unknown) => {
-            const axisInfo = (
-                event as { axesInfo?: Array<{ value?: number | string }> }
-            ).axesInfo?.[0];
-            const axisValue = axisInfo?.value;
-            const sampleIndex =
-                typeof axisValue === "number" ? axisValue : Number(axisValue);
+                if (!instanceRef.current) {
+                    instanceRef.current = echarts.init(chartRef.current);
+                }
 
-            if (
-                !Number.isInteger(sampleIndex) ||
-                sampleIndex < 0 ||
-                sampleIndex >= props.samples.length
-            ) {
-                return;
+                const chart = instanceRef.current;
+
+                if (props.syncGroup) {
+                    chart.group = props.syncGroup;
+                    echarts.connect(props.syncGroup);
+                }
+
+                chart.setOption(option);
+
+                const notifyVisibleRange = () => {
+                    const range = getVisibleSampleRange(
+                        chart,
+                        props.samples.length
+                    );
+                    props.onVisibleRangeChange?.(
+                        range.startIndex,
+                        range.endIndex
+                    );
+                };
+                const handleAxisPointerUpdate = (event: unknown) => {
+                    const axisInfo = (
+                        event as {
+                            axesInfo?: Array<{ value?: number | string }>;
+                        }
+                    ).axesInfo?.[0];
+                    const axisValue = axisInfo?.value;
+                    const sampleIndex =
+                        typeof axisValue === "number"
+                            ? axisValue
+                            : Number(axisValue);
+
+                    if (
+                        !Number.isInteger(sampleIndex) ||
+                        sampleIndex < 0 ||
+                        sampleIndex >= props.samples.length
+                    ) {
+                        return;
+                    }
+
+                    props.onSampleFocus?.(sampleIndex);
+                };
+                const handleChartClick = (event: unknown) => {
+                    const dataIndex = (event as { dataIndex?: number })
+                        .dataIndex;
+
+                    if (typeof dataIndex !== "number") {
+                        return;
+                    }
+
+                    props.onSampleFocus?.(dataIndex);
+                };
+                const resizeChart = () => {
+                    const wrapper = wrapperRef.current;
+
+                    if (!wrapper) {
+                        chart.resize();
+                        return;
+                    }
+
+                    chart.resize({
+                        width: wrapper.clientWidth,
+                        height: wrapper.clientHeight
+                    });
+                };
+                const onResize = () => resizeChart();
+                const resizeObserver =
+                    typeof ResizeObserver === "undefined"
+                        ? null
+                        : new ResizeObserver(() => {
+                              resizeChart();
+                          });
+
+                notifyVisibleRange();
+                resizeChart();
+
+                const wrapper = wrapperRef.current;
+
+                if (wrapper) {
+                    resizeObserver?.observe(wrapper);
+                }
+
+                chart.on("updateAxisPointer", handleAxisPointerUpdate);
+                chart.on("click", handleChartClick);
+                chart.on("datazoom", notifyVisibleRange);
+                window.addEventListener("resize", onResize);
+
+                cleanup = () => {
+                    chart.off("updateAxisPointer", handleAxisPointerUpdate);
+                    chart.off("click", handleChartClick);
+                    chart.off("datazoom", notifyVisibleRange);
+                    window.removeEventListener("resize", onResize);
+                    resizeObserver?.disconnect();
+                };
+
+                setRuntimeState("ready");
+            } catch {
+                if (!disposed) {
+                    setRuntimeState("error");
+                }
             }
-
-            props.onSampleFocus?.(sampleIndex);
-        };
-        const handleChartClick = (event: unknown) => {
-            const dataIndex = (event as { dataIndex?: number }).dataIndex;
-
-            if (typeof dataIndex !== "number") {
-                return;
-            }
-
-            props.onSampleFocus?.(dataIndex);
-        };
-        const onResize = () => chart.resize();
-
-        notifyVisibleRange();
-
-        chart.on("updateAxisPointer", handleAxisPointerUpdate);
-        chart.on("click", handleChartClick);
-        chart.on("datazoom", notifyVisibleRange);
-        window.addEventListener("resize", onResize);
+        })();
 
         return () => {
-            chart.off("updateAxisPointer", handleAxisPointerUpdate);
-            chart.off("click", handleChartClick);
-            chart.off("datazoom", notifyVisibleRange);
-            window.removeEventListener("resize", onResize);
+            disposed = true;
+            cleanup();
         };
     }, [
         option,
@@ -227,5 +295,43 @@ export function MetricChart(props: MetricChartProps) {
         };
     }, []);
 
-    return <div ref={chartRef} style={{ width: "100%", height: "280px" }} />;
+    return (
+        <div
+            ref={wrapperRef}
+            style={{
+                position: "relative",
+                width: "100%",
+                minWidth: 0,
+                height: "280px",
+                overflow: "hidden"
+            }}
+        >
+            <div
+                ref={chartRef}
+                style={{
+                    width: "100%",
+                    minWidth: 0,
+                    height: "100%",
+                    opacity: runtimeState === "ready" ? 1 : 0
+                }}
+            />
+            {runtimeState !== "ready" ? (
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#9fb3cb",
+                        fontSize: "12px"
+                    }}
+                >
+                    {runtimeState === "error"
+                        ? "图表加载失败"
+                        : "图表加载中..."}
+                </div>
+            ) : null}
+        </div>
+    );
 }

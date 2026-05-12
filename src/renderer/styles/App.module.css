@@ -5,6 +5,7 @@
   flex-direction: column;
   padding: 12px;
   gap: 12px;
+  min-width: 0;
 }
 
 .header {
@@ -54,4 +55,5 @@
 .main {
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }

@@ -34,7 +34,7 @@ function createMainWindow(): BrowserWindow {
     const window = new BrowserWindow({
         width: 1420,
         height: 920,
-        minWidth: 1200,
+        minWidth: 900,
         minHeight: 780,
         backgroundColor: "#111823",
         webPreferences: {

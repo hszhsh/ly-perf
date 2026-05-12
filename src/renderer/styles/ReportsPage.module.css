@@ -3,6 +3,7 @@
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 12px;
+  min-width: 0;
 }
 
 .sidebar,
@@ -72,10 +73,12 @@
 
 .content {
   padding: 12px;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .detailHeader {
@@ -179,7 +182,9 @@
 }
 
 .detailBody {
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   display: grid;
   gap: 10px;
   overflow: auto;
@@ -189,6 +194,7 @@
 .chartSection,
 .previewSection {
   min-height: 0;
+  min-width: 0;
   display: grid;
   gap: 8px;
   border: 1px solid rgba(116, 145, 171, 0.26);
@@ -219,6 +225,7 @@
   gap: 10px;
   align-content: start;
   overflow: auto;
+  min-width: 0;
 }
 
 .metricStatsPanel {
@@ -322,19 +329,38 @@
 @media (max-width: 1200px) {
   .page {
     grid-template-columns: 1fr;
+    grid-template-rows: clamp(180px, 26vh, 240px) minmax(0, 1fr);
   }
 
   .sidebar {
-    max-height: 40vh;
-  }
-
-  .summaryGrid {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    max-height: none;
+    min-height: 0;
   }
 
   .sectionHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .content {
+    overflow: auto;
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .detailBody {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .chartSection {
+    min-height: 348px;
+  }
+
+  .chartStack {
+    overflow: visible;
   }
 
   .metricStatsGrid {

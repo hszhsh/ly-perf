@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { MonitorPage } from "@renderer/pages/MonitorPage";
-import { ReportsPage } from "@renderer/pages/ReportsPage";
 import styles from "./styles/App.module.css";
 
 type TabKey = "monitor" | "reports";
+
+const ReportsPage = lazy(async () => {
+    const module = await import(
+        /* webpackChunkName: "reports-page" */ "@renderer/pages/ReportsPage"
+    );
+
+    return {
+        default: module.ReportsPage
+    };
+});
 
 export function App() {
     const [activeTab, setActiveTab] = useState<TabKey>("monitor");
@@ -84,7 +93,9 @@ export function App() {
                 {activeTab === "monitor" ? (
                     <MonitorPage onMonitorBusyChange={setIsMonitorBusy} />
                 ) : (
-                    <ReportsPage />
+                    <Suspense fallback={<p>历史报告加载中...</p>}>
+                        <ReportsPage />
+                    </Suspense>
                 )}
             </main>
         </div>

@@ -15,6 +15,7 @@ const config: Configuration = {
     output: {
         path: path.resolve(__dirname, ".rspack/renderer"),
         filename: "[name].js",
+        chunkFilename: isDev ? "[name].chunk.js" : "[name].[contenthash:8].js",
         publicPath: "/"
     },
     resolve: {
