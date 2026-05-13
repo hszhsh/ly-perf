@@ -16,6 +16,9 @@ export function ReportsPage() {
         exportResult,
         feedback,
         busyAction,
+        eventBusyAction,
+        eventErrorMessage,
+        clearEventError,
         refreshing,
         renameDialogOpen,
         renameDialogError,
@@ -28,7 +31,10 @@ export function ReportsPage() {
         handleRename,
         openDeleteDialog,
         closeDeleteDialog,
-        handleDelete
+        handleDelete,
+        handleCreateEvent,
+        handleUpdateEvent,
+        handleDeleteEvent
     } = useReportsRuntime();
 
     const controlsDisabled =
@@ -106,6 +112,12 @@ export function ReportsPage() {
                                 onLoadChartRangeChange={
                                     handleLoadChartRangeChange
                                 }
+                                eventBusyAction={eventBusyAction}
+                                eventErrorMessage={eventErrorMessage}
+                                onClearEventError={clearEventError}
+                                onCreateEvent={handleCreateEvent}
+                                onUpdateEvent={handleUpdateEvent}
+                                onDeleteEvent={handleDeleteEvent}
                             />
 
                             <ReportsScreenshotPreview

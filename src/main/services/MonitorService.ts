@@ -6,7 +6,9 @@ import type {
     MonitorConfig,
     MonitorSample,
     MonitorState,
-    SessionDetail
+    SessionDetail,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate
 } from "@shared/types";
 import { AdbClient } from "@main/adb/AdbClient";
 import { DeviceService } from "@main/services/DeviceService";
@@ -118,6 +120,45 @@ export class MonitorService {
         return { running: false };
     }
 
+    async createSessionEvent(
+        sessionId: string,
+        input: SessionTimelineEventInput
+    ): Promise<SessionDetail> {
+        const active = this.requireActiveSession(sessionId);
+        const updated = this.sessionStore.withCreatedEvent(active.session, input);
+
+        active.session = updated;
+        await this.sessionStore.updateSessionJournalMetadata(updated);
+
+        return updated;
+    }
+
+    async updateSessionEvent(
+        sessionId: string,
+        input: SessionTimelineEventUpdate
+    ): Promise<SessionDetail> {
+        const active = this.requireActiveSession(sessionId);
+        const updated = this.sessionStore.withUpdatedEvent(active.session, input);
+
+        active.session = updated;
+        await this.sessionStore.updateSessionJournalMetadata(updated);
+
+        return updated;
+    }
+
+    async deleteSessionEvent(
+        sessionId: string,
+        eventId: string
+    ): Promise<SessionDetail> {
+        const active = this.requireActiveSession(sessionId);
+        const updated = this.sessionStore.withDeletedEvent(active.session, eventId);
+
+        active.session = updated;
+        await this.sessionStore.updateSessionJournalMetadata(updated);
+
+        return updated;
+    }
+
     getState(): MonitorState {
         if (!this.active) {
             return { running: false };
@@ -191,6 +232,14 @@ export class MonitorService {
         } finally {
             active.collecting = false;
         }
+    }
+
+    private requireActiveSession(sessionId: string): ActiveMonitor {
+        if (!this.active || this.active.session.id !== sessionId) {
+            throw new Error("目标会话当前不在实时监测中。");
+        }
+
+        return this.active;
     }
 
     private captureScreenshotIfNeeded(active: ActiveMonitor): void {

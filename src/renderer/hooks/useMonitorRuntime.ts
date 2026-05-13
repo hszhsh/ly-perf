@@ -8,9 +8,14 @@ import type {
     MonitorSample,
     MonitorState,
     RuntimeInfo,
+    SessionTimelineEvent,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate,
     ConnectedDevice
 } from "@shared/types";
 import type { MonitorSettingsState } from "@renderer/hooks/useMonitorSettings";
+
+type EventBusyAction = "create" | "update" | "delete";
 
 interface UseMonitorRuntimeResult {
     runtimeInfo: RuntimeInfo | null;
@@ -27,10 +32,17 @@ interface UseMonitorRuntimeResult {
     isScreenshotLoading: boolean;
     isStarting: boolean;
     errorMessage: string;
+    sessionEvents: SessionTimelineEvent[];
+    eventBusyAction: EventBusyAction | null;
+    eventErrorMessage: string;
+    clearEventError: () => void;
     refreshDevices: () => Promise<void>;
     refreshApps: (serial: string) => Promise<void>;
     handleStart: () => Promise<void>;
     handleStop: () => Promise<void>;
+    handleCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
+    handleUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
+    handleDeleteEvent: (eventId: string) => Promise<boolean>;
 }
 
 export function useMonitorRuntime(
@@ -52,6 +64,13 @@ export function useMonitorRuntime(
     const [isScreenshotLoading, setIsScreenshotLoading] = useState(false);
     const [isStarting, setIsStarting] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
+    const [sessionEvents, setSessionEvents] = useState<SessionTimelineEvent[]>(
+        []
+    );
+    const [eventBusyAction, setEventBusyAction] = useState<EventBusyAction | null>(
+        null
+    );
+    const [eventErrorMessage, setEventErrorMessage] = useState("");
 
     const latestScreenshot = useMemo(() => {
         for (let i = samples.length - 1; i >= 0; i -= 1) {
@@ -134,6 +153,7 @@ export function useMonitorRuntime(
     }, [latestScreenshot]);
 
     useEffect(() => {
+        let cancelled = false;
         const dispose = window.lyPerf.onMonitorSample((sample) => {
             setSamples((prev) => {
                 const next = [...prev, sample];
@@ -159,6 +179,10 @@ export function useMonitorRuntime(
                 window.lyPerf.getMonitorState(),
                 window.lyPerf.getMonitorCapabilityReport()
             ]);
+            if (cancelled) {
+                return;
+            }
+
             setRuntimeInfo(runtime);
             setMonitorState(state);
             if (state.config?.serial) {
@@ -188,10 +212,29 @@ export function useMonitorRuntime(
                 setCapabilityReport(report);
                 setFpsDebug(report.fps);
             }
+
+            if (state.sessionId) {
+                try {
+                    const detail = await window.lyPerf.getSession(state.sessionId);
+                    if (!cancelled) {
+                        setSessionEvents(detail.events);
+                    }
+                } catch {
+                    if (!cancelled) {
+                        setSessionEvents([]);
+                    }
+                }
+            } else {
+                setSessionEvents([]);
+            }
+
             await refreshDevices();
         })();
 
-        return dispose;
+        return () => {
+            cancelled = true;
+            dispose();
+        };
     }, []);
 
     useEffect(() => {
@@ -236,8 +279,10 @@ export function useMonitorRuntime(
         setErrorMessage("");
         setIsStarting(true);
         setSamples([]);
+        setSessionEvents([]);
         setFpsDebug(null);
         setCapabilityReport(null);
+        setEventErrorMessage("");
 
         const config: MonitorConfig = {
             serial: settings.selectedSerial,
@@ -266,6 +311,62 @@ export function useMonitorRuntime(
         setMonitorState(state);
     }
 
+    function clearEventError(): void {
+        setEventErrorMessage("");
+    }
+
+    async function mutateSessionEvent(
+        action: EventBusyAction,
+        fallbackMessage: string,
+        handler: (sessionId: string) => Promise<{ events: SessionTimelineEvent[] }>
+    ): Promise<boolean> {
+        const sessionId = monitorState.sessionId;
+        if (!sessionId) {
+            setEventErrorMessage("当前没有运行中的会话，无法编辑时间轴事件。");
+            return false;
+        }
+
+        setEventBusyAction(action);
+
+        try {
+            const updated = await handler(sessionId);
+            setSessionEvents(updated.events);
+            setEventErrorMessage("");
+            return true;
+        } catch (error) {
+            setEventErrorMessage(
+                error instanceof Error && error.message
+                    ? error.message
+                    : fallbackMessage
+            );
+            return false;
+        } finally {
+            setEventBusyAction(null);
+        }
+    }
+
+    async function handleCreateEvent(
+        input: SessionTimelineEventInput
+    ): Promise<boolean> {
+        return mutateSessionEvent("create", "新增时间轴事件失败。", (sessionId) =>
+            window.lyPerf.createSessionEvent(sessionId, input)
+        );
+    }
+
+    async function handleUpdateEvent(
+        input: SessionTimelineEventUpdate
+    ): Promise<boolean> {
+        return mutateSessionEvent("update", "更新时间轴事件失败。", (sessionId) =>
+            window.lyPerf.updateSessionEvent(sessionId, input)
+        );
+    }
+
+    async function handleDeleteEvent(eventId: string): Promise<boolean> {
+        return mutateSessionEvent("delete", "删除时间轴事件失败。", (sessionId) =>
+            window.lyPerf.deleteSessionEvent(sessionId, eventId)
+        );
+    }
+
     return {
         runtimeInfo,
         devices,
@@ -281,9 +382,16 @@ export function useMonitorRuntime(
         isScreenshotLoading,
         isStarting,
         errorMessage,
+        sessionEvents,
+        eventBusyAction,
+        eventErrorMessage,
+        clearEventError,
         refreshDevices,
         refreshApps,
         handleStart,
-        handleStop
+        handleStop,
+        handleCreateEvent,
+        handleUpdateEvent,
+        handleDeleteEvent
     };
 }

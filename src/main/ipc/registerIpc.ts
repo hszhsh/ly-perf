@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
-import type { MonitorConfig } from "@shared/types";
+import type {
+    MonitorConfig,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate
+} from "@shared/types";
 import { DeviceService } from "@main/services/DeviceService";
 import { MonitorService } from "@main/services/MonitorService";
 import { ReportService } from "@main/services/ReportService";
@@ -42,6 +46,8 @@ interface RegisterIpcDependencies {
 
 export function registerIpcHandlers(deps: RegisterIpcDependencies): void {
     const dataDirPath = path.resolve(deps.dataDir);
+    const hasActiveSession = (sessionId: string): boolean =>
+        deps.monitorService.getState().sessionId === sessionId;
 
     ipcMain.handle(IPC_CHANNELS.getRuntimeInfo, async () => ({
         adbPath: deps.adbPath,
@@ -113,6 +119,38 @@ export function registerIpcHandlers(deps: RegisterIpcDependencies): void {
 
     ipcMain.handle(IPC_CHANNELS.getSession, async (_event, sessionId: string) =>
         deps.sessionStore.getSession(sessionId)
+    );
+
+    ipcMain.handle(
+        IPC_CHANNELS.createSessionEvent,
+        async (
+            _event,
+            sessionId: string,
+            input: SessionTimelineEventInput
+        ) =>
+            hasActiveSession(sessionId)
+                ? deps.monitorService.createSessionEvent(sessionId, input)
+                : deps.sessionStore.createSessionEvent(sessionId, input)
+    );
+
+    ipcMain.handle(
+        IPC_CHANNELS.updateSessionEvent,
+        async (
+            _event,
+            sessionId: string,
+            input: SessionTimelineEventUpdate
+        ) =>
+            hasActiveSession(sessionId)
+                ? deps.monitorService.updateSessionEvent(sessionId, input)
+                : deps.sessionStore.updateSessionEvent(sessionId, input)
+    );
+
+    ipcMain.handle(
+        IPC_CHANNELS.deleteSessionEvent,
+        async (_event, sessionId: string, eventId: string) =>
+            hasActiveSession(sessionId)
+                ? deps.monitorService.deleteSessionEvent(sessionId, eventId)
+                : deps.sessionStore.deleteSessionEvent(sessionId, eventId)
     );
 
     ipcMain.handle(

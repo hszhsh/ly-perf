@@ -93,6 +93,30 @@ export interface MonitorSample {
     capabilityReport?: MetricCapabilityReport;
 }
 
+export type SessionTimelineEventType = "note" | "action" | "issue";
+
+export interface SessionTimelineEvent {
+    id: string;
+    timestamp: number;
+    type: SessionTimelineEventType;
+    color: string;
+    text: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface SessionTimelineEventInput {
+    timestamp: number;
+    type: SessionTimelineEventType;
+    color: string;
+    text: string;
+}
+
+export interface SessionTimelineEventUpdate
+    extends SessionTimelineEventInput {
+    id: string;
+}
+
 export interface ConnectedDevice {
     serial: string;
     status: string;
@@ -154,6 +178,7 @@ export interface SessionDetail extends SessionSummary {
     config: MonitorConfig;
     deviceInfo: DeviceInfo;
     samples: MonitorSample[];
+    events: SessionTimelineEvent[];
 }
 
 export interface ExportResult {
@@ -183,6 +208,18 @@ export interface LyPerfApi {
     onMonitorSample: (handler: (sample: MonitorSample) => void) => () => void;
     listSessions: () => Promise<SessionSummary[]>;
     getSession: (sessionId: string) => Promise<SessionDetail>;
+    createSessionEvent: (
+        sessionId: string,
+        input: SessionTimelineEventInput
+    ) => Promise<SessionDetail>;
+    updateSessionEvent: (
+        sessionId: string,
+        input: SessionTimelineEventUpdate
+    ) => Promise<SessionDetail>;
+    deleteSessionEvent: (
+        sessionId: string,
+        eventId: string
+    ) => Promise<SessionDetail>;
     renameSession: (
         sessionId: string,
         displayName: string

@@ -1,5 +1,14 @@
-import type { SessionDetail } from "@shared/types";
-import { MetricChart } from "@renderer/components/MetricChart";
+import { useState } from "react";
+import type {
+    SessionDetail,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate
+} from "@shared/types";
+import {
+    MetricChart,
+    type ChartFocusRequest
+} from "@renderer/components/MetricChart";
+import { TimelineEventsPanel } from "@renderer/components/TimelineEventsPanel";
 import {
     FPS_CHART_SERIES,
     getLoadChartSeries,
@@ -33,6 +42,12 @@ interface ReportsChartsPanelProps {
     loadChartStats: LoadChartStatItem[];
     onSampleFocus: (sampleIndex: number) => void;
     onLoadChartRangeChange: (startIndex: number, endIndex: number) => void;
+    eventBusyAction: "create" | "update" | "delete" | null;
+    eventErrorMessage: string | null;
+    onClearEventError: () => void;
+    onCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
+    onUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
+    onDeleteEvent: (eventId: string) => Promise<boolean>;
 }
 
 export function ReportsChartsPanel({
@@ -41,8 +56,28 @@ export function ReportsChartsPanel({
     normalizedLoadChartRange,
     loadChartStats,
     onSampleFocus,
-    onLoadChartRangeChange
+    onLoadChartRangeChange,
+    eventBusyAction,
+    eventErrorMessage,
+    onClearEventError,
+    onCreateEvent,
+    onUpdateEvent,
+    onDeleteEvent
 }: ReportsChartsPanelProps) {
+    const [requestedCreateTimestamp, setRequestedCreateTimestamp] = useState<
+        number | null
+    >(null);
+    const [focusRequest, setFocusRequest] = useState<ChartFocusRequest | null>(
+        null
+    );
+
+    function handleLocateTimestamp(timestamp: number): void {
+        setFocusRequest((current) => ({
+            id: (current?.id ?? 0) + 1,
+            timestamp
+        }));
+    }
+
     return (
         <section className={styles.chartSection}>
             <div className={styles.sectionHeader}>
@@ -52,12 +87,16 @@ export function ReportsChartsPanel({
                 </span>
             </div>
 
-            {sessionDetail.samples.length > 0 ? (
-                <div className={styles.chartStack}>
+            <div className={styles.chartStack}>
+                {sessionDetail.samples.length > 0 ? (
+                    <>
                     <MetricChart
                         title="帧率（FPS）"
                         samples={sessionDetail.samples}
+                        events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         syncGroup={chartSyncGroup}
+                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={FPS_CHART_SERIES}
                     />
@@ -65,7 +104,10 @@ export function ReportsChartsPanel({
                     <MetricChart
                         title="负载（App CPU / Total CPU / GPU）"
                         samples={sessionDetail.samples}
+                        events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         syncGroup={chartSyncGroup}
+                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         onVisibleRangeChange={onLoadChartRangeChange}
                         series={getLoadChartSeries(sessionDetail.config.cpuMode)}
@@ -114,7 +156,10 @@ export function ReportsChartsPanel({
                     <MetricChart
                         title="内存细分（MB）"
                         samples={sessionDetail.samples}
+                        events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         syncGroup={chartSyncGroup}
+                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={MEMORY_CHART_SERIES}
                     />
@@ -122,7 +167,10 @@ export function ReportsChartsPanel({
                     <MetricChart
                         title="资源吞吐（网络上下行速率 / 磁盘）"
                         samples={sessionDetail.samples}
+                        events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         syncGroup={chartSyncGroup}
+                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={THROUGHPUT_CHART_SERIES}
                     />
@@ -130,16 +178,37 @@ export function ReportsChartsPanel({
                     <MetricChart
                         title="温度与功耗"
                         samples={sessionDetail.samples}
+                        events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         syncGroup={chartSyncGroup}
+                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={THERMAL_POWER_CHART_SERIES}
                     />
-                </div>
-            ) : (
-                <p className={styles.empty}>
-                    该历史会话暂无采样数据，暂时无法绘制趋势图。
-                </p>
-            )}
+                    </>
+                ) : (
+                    <p className={styles.empty}>
+                        该历史会话暂无采样数据，暂时无法绘制趋势图。
+                    </p>
+                )}
+
+                <TimelineEventsPanel
+                    events={sessionDetail.events}
+                    samples={sessionDetail.samples}
+                    editable
+                    busyAction={eventBusyAction}
+                    errorText={eventErrorMessage}
+                    requestedCreateTimestamp={requestedCreateTimestamp}
+                    onCreateRequestHandled={() =>
+                        setRequestedCreateTimestamp(null)
+                    }
+                    onClearError={onClearEventError}
+                    onCreate={onCreateEvent}
+                    onUpdate={onUpdateEvent}
+                    onDelete={onDeleteEvent}
+                    onLocateTimestamp={handleLocateTimestamp}
+                />
+            </div>
         </section>
     );
 }

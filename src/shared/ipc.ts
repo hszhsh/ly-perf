@@ -11,6 +11,9 @@ export const IPC_CHANNELS = {
     monitorSample: "monitor:sample",
     listSessions: "report:list-sessions",
     getSession: "report:get-session",
+    createSessionEvent: "report:create-session-event",
+    updateSessionEvent: "report:update-session-event",
+    deleteSessionEvent: "report:delete-session-event",
     renameSession: "report:rename-session",
     deleteSession: "report:delete-session",
     exportSession: "report:export-session"

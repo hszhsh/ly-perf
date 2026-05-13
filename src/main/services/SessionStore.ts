@@ -6,12 +6,21 @@ import type {
     MonitorConfig,
     MonitorSample,
     SessionDetail,
+    SessionTimelineEvent,
+    SessionTimelineEventInput,
     SessionPersistenceState,
+    SessionTimelineEventUpdate,
     SessionSummary
 } from "@shared/types";
 
 interface SessionJournalMetadata extends Omit<SessionDetail, "samples"> {
     sampleCount: number;
+}
+
+function isValidEventType(
+    value: string | undefined
+): value is SessionTimelineEvent["type"] {
+    return value === "note" || value === "action" || value === "issue";
 }
 
 export class SessionStore {
@@ -58,7 +67,8 @@ export class SessionStore {
             persistenceState: "finalized",
             config,
             deviceInfo,
-            samples: []
+            samples: [],
+            events: []
         };
     }
 
@@ -188,6 +198,122 @@ export class SessionStore {
         return this.loadSessionFromJournal(sessionId);
     }
 
+    async createSessionEvent(
+        sessionId: string,
+        input: SessionTimelineEventInput
+    ): Promise<SessionDetail> {
+        const session = await this.getSession(sessionId);
+        const updated = this.withCreatedEvent(session, input);
+
+        await this.saveSession(updated);
+
+        return updated;
+    }
+
+    async updateSessionEvent(
+        sessionId: string,
+        input: SessionTimelineEventUpdate
+    ): Promise<SessionDetail> {
+        const session = await this.getSession(sessionId);
+        const updated = this.withUpdatedEvent(session, input);
+
+        await this.saveSession(updated);
+
+        return updated;
+    }
+
+    async deleteSessionEvent(
+        sessionId: string,
+        eventId: string
+    ): Promise<SessionDetail> {
+        const session = await this.getSession(sessionId);
+        const updated = this.withDeletedEvent(session, eventId);
+
+        await this.saveSession(updated);
+
+        return updated;
+    }
+
+    withCreatedEvent(
+        session: SessionDetail,
+        input: SessionTimelineEventInput
+    ): SessionDetail {
+        const timestamp = this.normalizeEventTimestamp(input.timestamp);
+        const text = this.normalizeEventText(input.text);
+        const color = this.normalizeEventColor(input.color);
+        const type = this.normalizeEventType(input.type);
+        const now = Date.now();
+        const nextEvent: SessionTimelineEvent = {
+            id: randomUUID(),
+            timestamp,
+            type,
+            color,
+            text,
+            createdAt: now,
+            updatedAt: now
+        };
+
+        return this.normalizeSession({
+            ...session,
+            events: [...session.events, nextEvent]
+        });
+    }
+
+    withUpdatedEvent(
+        session: SessionDetail,
+        input: SessionTimelineEventUpdate
+    ): SessionDetail {
+        const eventId = input.id.trim();
+        if (!eventId) {
+            throw new Error("事件 ID 无效。");
+        }
+
+        const existingEvent = session.events.find((event) => event.id === eventId);
+        if (!existingEvent) {
+            throw new Error("未找到要更新的事件。");
+        }
+
+        const timestamp = this.normalizeEventTimestamp(input.timestamp);
+        const text = this.normalizeEventText(input.text);
+        const color = this.normalizeEventColor(input.color);
+        const type = this.normalizeEventType(input.type);
+        const updatedAt = Date.now();
+
+        return this.normalizeSession({
+            ...session,
+            events: session.events.map((event) =>
+                event.id === eventId
+                    ? {
+                          ...event,
+                          timestamp,
+                          type,
+                          color,
+                          text,
+                          updatedAt
+                      }
+                    : event
+            )
+        });
+    }
+
+    withDeletedEvent(session: SessionDetail, eventId: string): SessionDetail {
+        const normalizedEventId = eventId.trim();
+        if (!normalizedEventId) {
+            throw new Error("事件 ID 无效。");
+        }
+
+        if (!session.events.some((event) => event.id === normalizedEventId)) {
+            throw new Error("未找到要删除的事件。");
+        }
+
+        return this.normalizeSession({
+            ...session,
+            events: session.events.filter(
+                (event) => event.id !== normalizedEventId
+            )
+        });
+    }
+
     async renameSession(
         sessionId: string,
         displayName: string
@@ -232,8 +358,98 @@ export class SessionStore {
             persistenceState: this.normalizePersistenceState(
                 session.persistenceState
             ),
-            sampleCount: session.samples.length
+            sampleCount: session.samples.length,
+            events: this.normalizeEvents(session.events)
         };
+    }
+
+    private normalizeEvents(
+        events: SessionTimelineEvent[] | undefined
+    ): SessionTimelineEvent[] {
+        if (!Array.isArray(events)) {
+            return [];
+        }
+
+        return events
+            .map((event) => {
+                const normalizedText = event?.text?.trim();
+                if (
+                    !event ||
+                    typeof event.id !== "string" ||
+                    !event.id ||
+                    typeof event.timestamp !== "number" ||
+                    !Number.isFinite(event.timestamp) ||
+                    !isValidEventType(event.type) ||
+                    typeof event.color !== "string" ||
+                    !event.color ||
+                    !normalizedText
+                ) {
+                    return null;
+                }
+
+                const createdAt =
+                    typeof event.createdAt === "number" &&
+                    Number.isFinite(event.createdAt)
+                        ? event.createdAt
+                        : event.timestamp;
+                const updatedAt =
+                    typeof event.updatedAt === "number" &&
+                    Number.isFinite(event.updatedAt)
+                        ? event.updatedAt
+                        : createdAt;
+
+                return {
+                    id: event.id,
+                    timestamp: event.timestamp,
+                    type: event.type,
+                    color: event.color,
+                    text: normalizedText,
+                    createdAt,
+                    updatedAt
+                } satisfies SessionTimelineEvent;
+            })
+            .filter(
+                (event): event is SessionTimelineEvent => event !== null
+            )
+            .sort((left, right) => left.timestamp - right.timestamp);
+    }
+
+    private normalizeEventTimestamp(timestamp: number): number {
+        if (!Number.isFinite(timestamp)) {
+            throw new Error("事件时间无效。");
+        }
+
+        return Math.floor(timestamp);
+    }
+
+    private normalizeEventText(text: string): string {
+        const normalizedText = text?.trim();
+
+        if (!normalizedText) {
+            throw new Error("事件内容不能为空。");
+        }
+
+        return normalizedText;
+    }
+
+    private normalizeEventColor(color: string): string {
+        const normalizedColor = color?.trim();
+
+        if (!normalizedColor) {
+            throw new Error("事件颜色不能为空。");
+        }
+
+        return normalizedColor;
+    }
+
+    private normalizeEventType(
+        type: SessionTimelineEventInput["type"] | undefined
+    ): SessionTimelineEvent["type"] {
+        if (!isValidEventType(type)) {
+            throw new Error("事件类型无效。");
+        }
+
+        return type;
     }
 
     private normalizePersistenceState(
@@ -266,7 +482,8 @@ export class SessionStore {
             sampleCount: session.samples.length,
             persistenceState: session.persistenceState,
             config: session.config,
-            deviceInfo: session.deviceInfo
+            deviceInfo: session.deviceInfo,
+            events: session.events
         };
     }
 
@@ -298,7 +515,8 @@ export class SessionStore {
             persistenceState: "recovered",
             config: metadata.config,
             deviceInfo: metadata.deviceInfo,
-            samples
+            samples,
+            events: metadata.events
         });
     }
 

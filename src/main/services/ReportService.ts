@@ -115,8 +115,31 @@ export class ReportService {
 
         const workbook = XLSX.utils.book_new();
         const worksheet = XLSX.utils.json_to_sheet(rows);
+        const eventWorksheet = XLSX.utils.json_to_sheet(
+            session.events.map((event) => ({
+                id: event.id,
+                timestamp: new Date(event.timestamp).toISOString(),
+                type: event.type,
+                color: event.color,
+                text: event.text,
+                createdAt: new Date(event.createdAt).toISOString(),
+                updatedAt: new Date(event.updatedAt).toISOString()
+            })),
+            {
+                header: [
+                    "id",
+                    "timestamp",
+                    "type",
+                    "color",
+                    "text",
+                    "createdAt",
+                    "updatedAt"
+                ]
+            }
+        );
 
         XLSX.utils.book_append_sheet(workbook, worksheet, "metrics");
+        XLSX.utils.book_append_sheet(workbook, eventWorksheet, "events");
 
         const outputPath = path.join(outputDir, `${sessionId}.xlsx`);
         XLSX.writeFile(workbook, outputPath);
@@ -261,18 +284,207 @@ export class ReportService {
                 "temperature"
             ];
 
+            function formatAxisTime(timestamp) {
+                return new Date(timestamp).toLocaleTimeString([], {
+                    hour12: false,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                });
+            }
+
+            function formatMetaTime(timestamp) {
+                return new Date(timestamp).toLocaleString([], {
+                    hour12: false,
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    fractionalSecondDigits: 3
+                });
+            }
+
+            function escapeHtml(value) {
+                return String(value)
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#39;");
+            }
+
+            function getTimelineEventTypeLabel(type) {
+                if (type === "action") {
+                    return "操作";
+                }
+
+                if (type === "issue") {
+                    return "问题";
+                }
+
+                return "备注";
+            }
+
+            function renderTooltipSurface(content) {
+                return "<div style=\"min-width:260px;max-width:340px;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);\">" + content + "</div>";
+            }
+
+            function renderTooltipColorDot(color, size) {
+                const dotSize = size || 10;
+                return "<span style=\"display:inline-block;width:" + dotSize + "px;height:" + dotSize + "px;border-radius:999px;background:" + escapeHtml(color || "#7dd3fc") + ";box-shadow:0 0 0 1px rgba(255, 255, 255, 0.18) inset;\"></span>";
+            }
+
+            function renderTooltipBadge(label, color) {
+                return "<span style=\"display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid rgba(146, 173, 198, 0.24);background:rgba(21, 33, 47, 0.78);font-size:10px;color:" + escapeHtml(color || "#dbe7f6") + ";\">" + escapeHtml(label) + "</span>";
+            }
+
+            function renderTooltipHeader(options) {
+                return [
+                    '<div style="display:grid;gap:5px;margin-bottom:10px;">',
+                    options.eyebrow
+                        ? '<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#8ea1b7;">' + escapeHtml(options.eyebrow) + '</div>'
+                        : '',
+                    '<div style="display:flex;align-items:flex-start;gap:8px;min-width:0;">',
+                    options.accentColor ? renderTooltipColorDot(options.accentColor) : '',
+                    '<div style="font-size:13px;font-weight:700;color:#eff6ff;min-width:0;">' + escapeHtml(options.title) + '</div>',
+                    '</div>',
+                    options.meta
+                        ? '<div style="font-size:11px;color:#9fb3cb;">' + escapeHtml(options.meta) + '</div>'
+                        : '',
+                    '</div>'
+                ].join('');
+            }
+
+            function renderEventTooltipCard(data) {
+                const metaParts = [data.eventTimeLabel, data.eventSampleLabel].filter(Boolean);
+
+                return [
+                    '<div style="display:grid;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(116, 145, 171, 0.18);background:rgba(10, 17, 27, 0.7);">',
+                    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">',
+                    '<div style="display:flex;align-items:center;gap:8px;">',
+                    renderTooltipColorDot(data.eventColor || '#7dd3fc', 9),
+                    renderTooltipBadge(data.eventTypeLabel || '事件', data.eventColor),
+                    '</div>',
+                    metaParts.length > 0
+                        ? '<div style="font-size:11px;color:#9fb3cb;">' + escapeHtml(metaParts.join(' | ')) + '</div>'
+                        : '',
+                    '</div>',
+                    '<div style="font-size:12px;line-height:1.5;white-space:pre-wrap;color:#e9f2fd;">' + escapeHtml(data.eventFullText || '') + '</div>',
+                    '</div>'
+                ].join('');
+            }
+
+            function findNearestSampleIndex(samples, timestamp) {
+                if (!samples.length) {
+                    return -1;
+                }
+
+                let low = 0;
+                let high = samples.length - 1;
+
+                while (low <= high) {
+                    const middle = Math.floor((low + high) / 2);
+                    const middleTimestamp = samples[middle].timestamp;
+
+                    if (middleTimestamp === timestamp) {
+                        return middle;
+                    }
+
+                    if (middleTimestamp < timestamp) {
+                        low = middle + 1;
+                    } else {
+                        high = middle - 1;
+                    }
+                }
+
+                if (low >= samples.length) {
+                    return samples.length - 1;
+                }
+
+                if (high < 0) {
+                    return 0;
+                }
+
+                const nextDistance = Math.abs(samples[low].timestamp - timestamp);
+                const previousDistance = Math.abs(samples[high].timestamp - timestamp);
+
+                return previousDistance <= nextDistance ? high : low;
+            }
+
+            function getEventSampleLabel(samples, timestamp) {
+                const sampleIndex = findNearestSampleIndex(samples, timestamp);
+
+                return sampleIndex >= 0 ? "样本 " + (sampleIndex + 1) : undefined;
+            }
+
+            function formatMarkerTooltip(data) {
+                return renderTooltipSurface(
+                    renderTooltipHeader({
+                        eyebrow: 'Timeline Event',
+                        title: data.eventTypeLabel || '事件',
+                        meta: data.eventTimeLabel,
+                        accentColor: data.eventColor
+                    }) +
+                    renderEventTooltipCard(data)
+                );
+            }
+
             fetch("./report.json")
                 .then((res) => res.json())
                 .then((report) => {
                     const chart = echarts.init(document.getElementById("chart"));
-                    const labels = report.samples.map((sample) => new Date(sample.timestamp).toLocaleTimeString());
+                    const events = report.events || [];
 
-                    const series = METRICS.map((name) => ({
+                    const series = METRICS.map((name, index) => ({
                         type: "line",
                         name,
                         smooth: false,
                         showSymbol: false,
-                        data: report.samples.map((sample) => sample.metrics?.[name]?.value ?? null)
+                        data: report.samples.map((sample) => [sample.timestamp, sample.metrics?.[name]?.value ?? null]),
+                        markLine: index === 0 && events.length > 0
+                            ? {
+                                symbol: ["none", "none"],
+                                animation: false,
+                                lineStyle: {
+                                    width: 1.5
+                                },
+                                tooltip: {
+                                    appendToBody: true,
+                                    confine: true,
+                                    enterable: true,
+                                    backgroundColor: "transparent",
+                                    borderWidth: 0,
+                                    padding: 0,
+                                    extraCssText: "box-shadow:none;",
+                                    formatter: (params) => formatMarkerTooltip(params.data || {})
+                                },
+                                label: {
+                                    show: true,
+                                    position: "insideEndTop",
+                                    fontSize: 10,
+                                    formatter: (params) => params.data?.eventText || "事件"
+                                },
+                                data: events.map((event) => ({
+                                    xAxis: event.timestamp,
+                                    eventText: event.text.length > 18 ? event.text.slice(0, 18) + "..." : event.text,
+                                    eventFullText: event.text,
+                                    eventColor: event.color,
+                                    eventTypeLabel: getTimelineEventTypeLabel(event.type),
+                                    eventTimeLabel: formatMetaTime(event.timestamp),
+                                    eventSampleLabel: getEventSampleLabel(report.samples, event.timestamp),
+                                    lineStyle: {
+                                        color: event.color,
+                                        width: 1.5,
+                                        opacity: 0.88
+                                    },
+                                    label: {
+                                        color: event.color
+                                    }
+                                }))
+                            }
+                            : undefined
                     }));
 
                     chart.setOption({
@@ -292,9 +504,11 @@ export class ReportService {
                             bottom: 70
                         },
                         xAxis: {
-                            type: "category",
-                            data: labels,
-                            axisLabel: { color: "#9db0c7" }
+                            type: "time",
+                            axisLabel: {
+                                color: "#9db0c7",
+                                formatter: (value) => formatAxisTime(Number(value))
+                            }
                         },
                         yAxis: {
                             type: "value",
@@ -302,8 +516,8 @@ export class ReportService {
                             splitLine: { lineStyle: { color: "rgba(140,160,184,0.2)" } }
                         },
                         dataZoom: [
-                            { type: "inside" },
-                            { type: "slider", height: 24, bottom: 18 }
+                            { type: "inside", filterMode: "none" },
+                            { type: "slider", filterMode: "none", height: 24, bottom: 18 }
                         ],
                         series
                     });
@@ -318,14 +532,17 @@ export class ReportService {
                             return;
                         }
 
-                        const index = axisInfo.value;
+                        const index = findNearestSampleIndex(
+                            report.samples,
+                            Number(axisInfo.value)
+                        );
                         const sample = report.samples[index];
                         if (!sample) {
                             return;
                         }
 
                         meta.textContent =
-                            new Date(sample.timestamp).toLocaleString() +
+                            formatMetaTime(sample.timestamp) +
                             " | " +
                             sessionTitle +
                             " | " +

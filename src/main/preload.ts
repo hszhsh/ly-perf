@@ -6,6 +6,8 @@ import type {
     MonitorConfig,
     MonitorSample,
     SessionDetail,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate,
     SessionSummary
 } from "@shared/types";
 
@@ -46,6 +48,30 @@ const api: LyPerfApi = {
         ipcRenderer.invoke(
             IPC_CHANNELS.getSession,
             sessionId
+        ) as Promise<SessionDetail>,
+    createSessionEvent: (
+        sessionId: string,
+        input: SessionTimelineEventInput
+    ) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.createSessionEvent,
+            sessionId,
+            input
+        ) as Promise<SessionDetail>,
+    updateSessionEvent: (
+        sessionId: string,
+        input: SessionTimelineEventUpdate
+    ) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.updateSessionEvent,
+            sessionId,
+            input
+        ) as Promise<SessionDetail>,
+    deleteSessionEvent: (sessionId: string, eventId: string) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.deleteSessionEvent,
+            sessionId,
+            eventId
         ) as Promise<SessionDetail>,
     renameSession: (sessionId: string, displayName: string) =>
         ipcRenderer.invoke(

@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import type {
     ExportResult,
     SessionDetail,
+    SessionTimelineEventInput,
+    SessionTimelineEventUpdate,
     SessionSummary
 } from "@shared/types";
 
 export type BusyAction = "delete" | "export-html" | "export-xlsx" | "rename";
+export type EventBusyAction = "create" | "update" | "delete";
 
 export interface FeedbackState {
     type: "error" | "success";
@@ -27,6 +30,9 @@ interface UseReportsRuntimeResult {
     exportResult: ExportResult | null;
     feedback: FeedbackState | null;
     busyAction: BusyAction | null;
+    eventBusyAction: EventBusyAction | null;
+    eventErrorMessage: string | null;
+    clearEventError: () => void;
     refreshing: boolean;
     renameDialogOpen: boolean;
     renameDialogError: string | null;
@@ -40,6 +46,9 @@ interface UseReportsRuntimeResult {
     openDeleteDialog: () => void;
     closeDeleteDialog: () => void;
     handleDelete: () => Promise<void>;
+    handleCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
+    handleUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
+    handleDeleteEvent: (eventId: string) => Promise<boolean>;
 }
 
 export function useReportsRuntime(): UseReportsRuntimeResult {
@@ -51,6 +60,11 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
     const [exportResult, setExportResult] = useState<ExportResult | null>(null);
     const [feedback, setFeedback] = useState<FeedbackState | null>(null);
     const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
+    const [eventBusyAction, setEventBusyAction] =
+        useState<EventBusyAction | null>(null);
+    const [eventErrorMessage, setEventErrorMessage] = useState<string | null>(
+        null
+    );
     const [refreshing, setRefreshing] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [renameDialogError, setRenameDialogError] = useState<string | null>(
@@ -90,6 +104,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         if (!selectedSessionId) {
             setSessionDetail(null);
             setExportResult(null);
+            setEventErrorMessage(null);
             return;
         }
 
@@ -105,6 +120,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
 
                 setSessionDetail(detail);
                 setExportResult(null);
+                setEventErrorMessage(null);
             } catch (error) {
                 if (cancelled) {
                     return;
@@ -248,6 +264,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
                 type: "success",
                 text: `已删除历史会话 ${sessionDetail.displayName}。`
             });
+            setEventErrorMessage(null);
             await reloadSessions();
         } catch (error) {
             setFeedback({
@@ -259,6 +276,56 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         }
     }
 
+    function clearEventError(): void {
+        setEventErrorMessage(null);
+    }
+
+    async function mutateSessionEvent(
+        action: EventBusyAction,
+        fallbackMessage: string,
+        handler: (sessionId: string) => Promise<SessionDetail>
+    ): Promise<boolean> {
+        if (!sessionDetail) {
+            return false;
+        }
+
+        setEventBusyAction(action);
+
+        try {
+            const updated = await handler(sessionDetail.id);
+            setSessionDetail(updated);
+            setEventErrorMessage(null);
+            return true;
+        } catch (error) {
+            setEventErrorMessage(getErrorMessage(error, fallbackMessage));
+            return false;
+        } finally {
+            setEventBusyAction(null);
+        }
+    }
+
+    async function handleCreateEvent(
+        input: SessionTimelineEventInput
+    ): Promise<boolean> {
+        return mutateSessionEvent("create", "新增时间轴事件失败。", (sessionId) =>
+            window.lyPerf.createSessionEvent(sessionId, input)
+        );
+    }
+
+    async function handleUpdateEvent(
+        input: SessionTimelineEventUpdate
+    ): Promise<boolean> {
+        return mutateSessionEvent("update", "更新时间轴事件失败。", (sessionId) =>
+            window.lyPerf.updateSessionEvent(sessionId, input)
+        );
+    }
+
+    async function handleDeleteEvent(eventId: string): Promise<boolean> {
+        return mutateSessionEvent("delete", "删除时间轴事件失败。", (sessionId) =>
+            window.lyPerf.deleteSessionEvent(sessionId, eventId)
+        );
+    }
+
     return {
         sessions,
         selectedSessionId,
@@ -266,6 +333,9 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         exportResult,
         feedback,
         busyAction,
+        eventBusyAction,
+        eventErrorMessage,
+        clearEventError,
         refreshing,
         renameDialogOpen,
         renameDialogError,
@@ -278,6 +348,9 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         handleRename,
         openDeleteDialog,
         closeDeleteDialog,
-        handleDelete
+        handleDelete,
+        handleCreateEvent,
+        handleUpdateEvent,
+        handleDeleteEvent
     };
 }

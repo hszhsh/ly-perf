@@ -43,10 +43,17 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         isScreenshotLoading,
         isStarting,
         errorMessage,
+        sessionEvents,
+        eventBusyAction,
+        eventErrorMessage,
+        clearEventError,
         refreshDevices,
         refreshApps,
         handleStart,
-        handleStop
+        handleStop,
+        handleCreateEvent,
+        handleUpdateEvent,
+        handleDeleteEvent
     } = useMonitorRuntime({
         selectedSerial,
         setSelectedSerial,
@@ -124,6 +131,14 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
                     latestNetworkTx={latestMetrics?.networkTx}
                     latestNetworkTotal={latestMetrics?.networkTotal}
                     syncGroup={chartSyncGroup}
+                    events={sessionEvents}
+                    editableEvents={monitorState.running}
+                    eventBusyAction={eventBusyAction}
+                    eventErrorMessage={eventErrorMessage}
+                    onClearEventError={clearEventError}
+                    onCreateEvent={handleCreateEvent}
+                    onUpdateEvent={handleUpdateEvent}
+                    onDeleteEvent={handleDeleteEvent}
                 />
 
                 <MonitorPreviewPanel
