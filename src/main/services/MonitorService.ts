@@ -1,6 +1,9 @@
 import path from "node:path";
 import type {
     CpuUsageMode,
+    DeepMonitorConfig,
+    DeepMonitorSample,
+    DeepMonitorSchemaRevision,
     FpsMode,
     MetricCapabilityReport,
     MonitorConfig,
@@ -12,6 +15,7 @@ import type {
 } from "@shared/types";
 import { AdbClient } from "@main/adb/AdbClient";
 import { DeviceService } from "@main/services/DeviceService";
+import { DeepMonitorTcpService } from "@main/services/DeepMonitorTcpService";
 import { MetricCollector } from "@main/services/MetricCollector";
 import { SessionStore } from "@main/services/SessionStore";
 
@@ -41,14 +45,37 @@ function normalizeCpuUsageMode(value: string | undefined): CpuUsageMode {
     return value === "normalized" ? "normalized" : "traditional";
 }
 
+function normalizeDeepMonitorConfig(
+    value: DeepMonitorConfig | undefined
+): DeepMonitorConfig | undefined {
+    if (!value?.enabled) {
+        return undefined;
+    }
+
+    return {
+        enabled: true,
+        transport: "tcp",
+        socketKind: "raw-tcp",
+        preferredPort:
+            typeof value.preferredPort === "number" &&
+            Number.isFinite(value.preferredPort)
+                ? Math.floor(value.preferredPort)
+                : undefined
+    };
+}
+
 export class MonitorService {
     private active?: ActiveMonitor;
 
     constructor(
         private readonly adb: AdbClient,
         private readonly deviceService: DeviceService,
+        private readonly deepMonitor: DeepMonitorTcpService,
         private readonly collector: MetricCollector,
         private readonly sessionStore: SessionStore,
+        private readonly onStateChange: (state: MonitorState) => void,
+        private readonly onCustomSchema: (schema: DeepMonitorSchemaRevision) => void,
+        private readonly onCustomSamples: (samples: DeepMonitorSample[]) => void,
         private readonly onSample: (
             sessionId: string,
             sample: MonitorSample
@@ -64,6 +91,7 @@ export class MonitorService {
             ...config,
             fpsMode: normalizeFpsMode(config.fpsMode),
             cpuMode: normalizeCpuUsageMode(config.cpuMode),
+            deepMonitor: normalizeDeepMonitorConfig(config.deepMonitor),
             sampleIntervalMs: normalizeInterval(config.sampleIntervalMs, 1500),
             screenshotIntervalMs: normalizeInterval(
                 config.screenshotIntervalMs,
@@ -93,6 +121,8 @@ export class MonitorService {
         };
 
         this.active = active;
+        await this.startDeepMonitorIfNeeded(active);
+        this.emitStateChange();
         await this.collectTick(active);
 
         active.timer = setInterval(() => {
@@ -112,10 +142,15 @@ export class MonitorService {
             clearInterval(active.timer);
         }
 
+        if (active.session.config.deepMonitor?.enabled) {
+            await this.deepMonitor.stopSession();
+        }
+
         await active.persistenceChain;
         active.session.endedAt = Date.now();
         await this.sessionStore.finalizeSessionJournal(active.session);
         this.active = undefined;
+        this.emitStateChange();
 
         return { running: false };
     }
@@ -168,7 +203,8 @@ export class MonitorService {
             running: true,
             sessionId: this.active.session.id,
             config: this.active.session.config,
-            startedAt: this.active.session.startedAt
+            startedAt: this.active.session.startedAt,
+            deepMonitor: this.active.session.deepMonitor
         };
     }
 
@@ -186,6 +222,107 @@ export class MonitorService {
 
     async dispose(): Promise<void> {
         await this.stop();
+    }
+
+    private async startDeepMonitorIfNeeded(active: ActiveMonitor): Promise<void> {
+        const config = active.session.config.deepMonitor;
+        if (!config?.enabled) {
+            active.session.deepMonitor = undefined;
+            return;
+        }
+
+        const state = await this.deepMonitor.startSession({
+            serial: active.session.serial,
+            config,
+            onStateChange: (nextState) => {
+                if (!this.active || this.active !== active) {
+                    return;
+                }
+
+                active.session.deepMonitor = nextState;
+                void this.queuePersistence(active, async () => {
+                    await this.sessionStore.updateSessionJournalMetadata(
+                        active.session
+                    );
+                });
+                this.emitStateChange();
+            },
+            onSchemaDeclared: async (schema) => {
+                if (!this.active || this.active !== active) {
+                    return;
+                }
+
+                this.applyCustomSchema(active, schema);
+                await this.queuePersistence(active, async () => {
+                    await this.sessionStore.updateSessionJournalMetadata(
+                        active.session
+                    );
+                });
+                this.onCustomSchema(schema);
+                this.emitStateChange();
+            },
+            onSamplesReceived: async (samples) => {
+                if (!this.active || this.active !== active || samples.length === 0) {
+                    return;
+                }
+
+                this.applyCustomSamples(active, samples);
+                await this.queuePersistence(active, async () => {
+                    await this.sessionStore.appendCustomSamples(
+                        active.session.id,
+                        samples
+                    );
+                    await this.sessionStore.updateSessionJournalMetadata(
+                        active.session
+                    );
+                });
+                this.onCustomSamples(samples);
+            }
+        });
+
+        active.session.deepMonitor = state;
+    }
+
+    private applyCustomSchema(
+        active: ActiveMonitor,
+        schema: DeepMonitorSchemaRevision
+    ): void {
+        active.session.customMetricDefinitions = schema.metrics;
+        active.session.customChartDefinitions = schema.charts;
+        active.session.customSchemaHistory = [
+            ...(active.session.customSchemaHistory ?? []).filter(
+                (item) => item.revision !== schema.revision
+            ),
+            schema
+        ].sort((left, right) => left.revision - right.revision);
+        active.session.deepMonitor = {
+            ...active.session.deepMonitor,
+            enabled: true,
+            transport: "tcp",
+            socketKind: "raw-tcp",
+            phase: active.session.deepMonitor?.phase ?? "ready",
+            activeSchemaRevision: schema.revision,
+            protocolVersion: schema.protocolVersion ?? 1
+        };
+    }
+
+    private applyCustomSamples(
+        active: ActiveMonitor,
+        samples: DeepMonitorSample[]
+    ): void {
+        active.session.customSamples = [
+            ...(active.session.customSamples ?? []),
+            ...samples
+        ];
+
+        const latestTimestamp = samples[samples.length - 1]?.timestamp;
+        if (typeof latestTimestamp === "number") {
+            active.session.endedAt = Math.max(active.session.endedAt, latestTimestamp);
+        }
+    }
+
+    private emitStateChange(): void {
+        this.onStateChange(this.getState());
     }
 
     private async collectTick(active: ActiveMonitor): Promise<void> {
@@ -287,11 +424,20 @@ export class MonitorService {
         active: ActiveMonitor,
         task: () => Promise<void>
     ): void {
+        void this.queuePersistence(active, task);
+    }
+
+    private async queuePersistence(
+        active: ActiveMonitor,
+        task: () => Promise<void>
+    ): Promise<void> {
         active.persistenceChain = active.persistenceChain
             .then(task, task)
             .catch((error) => {
                 console.error("Persist monitor session journal failed:", error);
             });
+
+        await active.persistenceChain;
     }
 
     private async tryLaunchTargetApp(

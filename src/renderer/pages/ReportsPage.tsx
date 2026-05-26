@@ -1,5 +1,6 @@
 import { ReportsChartsPanel } from "@renderer/components/ReportsChartsPanel";
 import { ReportsSessionDialogs } from "@renderer/components/ReportsSessionDialogs";
+import { ToastViewport } from "@renderer/components/ToastViewport";
 import { useReportsChartRange } from "@renderer/hooks/useReportsChartRange";
 import { useReportsRuntime } from "@renderer/hooks/useReportsRuntime";
 import { useReportsScreenshots } from "@renderer/hooks/useReportsScreenshots";
@@ -18,6 +19,7 @@ export function ReportsPage() {
         busyAction,
         eventBusyAction,
         eventErrorMessage,
+        clearFeedback,
         clearEventError,
         refreshing,
         renameDialogOpen,
@@ -44,9 +46,6 @@ export function ReportsPage() {
         deleteDialogOpen;
     const latestMetrics =
         sessionDetail?.samples[sessionDetail.samples.length - 1]?.metrics;
-    const chartSyncGroup = sessionDetail
-        ? `report-metric-charts-${sessionDetail.id}`
-        : undefined;
     const {
         screenshotSampleIndexes,
         selectedScreenshotPosition,
@@ -54,13 +53,30 @@ export function ReportsPage() {
         selectedScreenshotUrl,
         isScreenshotLoading,
         handleChartSampleFocus,
+        handleChartTimestampFocus,
         jumpScreenshot
     } = useReportsScreenshots(sessionDetail);
     const {
+        restoredVisibleTimeRange,
         normalizedLoadChartRange,
         loadChartStats,
-        handleLoadChartRangeChange
+        customChartRangesById,
+        customChartStatsCards,
+        handleVisibleTimeRangeChange,
+        handleLoadChartRangeChange,
+        handleCustomChartRangeChange
     } = useReportsChartRange(sessionDetail);
+    const feedbackToasts = feedback
+        ? [
+              {
+                  id: String(feedback.id),
+                  title: feedback.type === "error" ? "操作失败" : "操作完成",
+                  description: feedback.text,
+                  tone: feedback.type,
+                  durationMs: feedback.type === "error" ? 5200 : 3200
+              }
+          ]
+        : [];
 
     return (
         <section className={styles.page}>
@@ -74,18 +90,6 @@ export function ReportsPage() {
             />
 
             <div className={styles.content}>
-                {feedback ? (
-                    <p
-                        className={
-                            feedback.type === "error"
-                                ? styles.errorMessage
-                                : styles.statusMessage
-                        }
-                    >
-                        {feedback.text}
-                    </p>
-                ) : null}
-
                 {sessionDetail ? (
                     <>
                         <ReportsSessionOverview
@@ -102,15 +106,29 @@ export function ReportsPage() {
                         />
                         <div className={styles.detailBody}>
                             <ReportsChartsPanel
+                                key={sessionDetail.id}
                                 sessionDetail={sessionDetail}
-                                chartSyncGroup={chartSyncGroup}
+                                restoredVisibleTimeRange={
+                                    restoredVisibleTimeRange
+                                }
                                 normalizedLoadChartRange={
                                     normalizedLoadChartRange
                                 }
                                 loadChartStats={loadChartStats}
                                 onSampleFocus={handleChartSampleFocus}
+                                onCustomTimestampFocus={
+                                    handleChartTimestampFocus
+                                }
+                                onVisibleTimeRangeChange={
+                                    handleVisibleTimeRangeChange
+                                }
                                 onLoadChartRangeChange={
                                     handleLoadChartRangeChange
+                                }
+                                customChartRangesById={customChartRangesById}
+                                customChartStatsCards={customChartStatsCards}
+                                onCustomChartRangeChange={
+                                    handleCustomChartRangeChange
                                 }
                                 eventBusyAction={eventBusyAction}
                                 eventErrorMessage={eventErrorMessage}
@@ -157,6 +175,11 @@ export function ReportsPage() {
                     }}
                 />
             </div>
+
+            <ToastViewport
+                toasts={feedbackToasts}
+                onDismiss={() => clearFeedback()}
+            />
         </section>
     );
 }

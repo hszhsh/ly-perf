@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type {
     CpuUsageMode,
+    DeepMonitorChartDefinition,
+    DeepMonitorMetricDefinition,
+    DeepMonitorSample,
     MetricDatum,
     MonitorSample,
     SessionTimelineEvent,
@@ -8,13 +11,21 @@ import type {
     SessionTimelineEventUpdate
 } from "@shared/types";
 import {
+    getChartTimeDomain,
     MetricChart,
-    type ChartFocusRequest
+    type ChartFocusRequest,
+    type ChartRangeRequest,
+    type ChartTimeDomain
 } from "@renderer/components/MetricChart";
+import { DeepMonitorStateTimelinePanel } from "@renderer/components/DeepMonitorStateTimelinePanel";
 import { TimelineEventsPanel } from "@renderer/components/TimelineEventsPanel";
 import {
     FPS_CHART_SERIES,
+    getCustomChartSeries,
+    getDeepMonitorMetricDefinitionMap,
     getLoadChartSeries,
+    getSortedCustomChartDefinitions,
+    getSortedDeepMonitorSamples,
     MEMORY_CHART_SERIES,
     THERMAL_POWER_CHART_SERIES,
     THROUGHPUT_CHART_SERIES
@@ -25,10 +36,12 @@ import styles from "@renderer/styles/MonitorPage.module.css";
 interface MonitorChartsPanelProps {
     samples: MonitorSample[];
     activeCpuMode: CpuUsageMode;
+    customMetricDefinitions: DeepMonitorMetricDefinition[];
+    customChartDefinitions: DeepMonitorChartDefinition[];
+    customSamples: DeepMonitorSample[];
     latestNetworkRx?: MetricDatum;
     latestNetworkTx?: MetricDatum;
     latestNetworkTotal?: MetricDatum;
-    syncGroup: string;
     events: SessionTimelineEvent[];
     editableEvents: boolean;
     eventBusyAction: "create" | "update" | "delete" | null;
@@ -62,10 +75,12 @@ function formatTraffic(metric: MetricDatum | undefined): string {
 export function MonitorChartsPanel({
     samples,
     activeCpuMode,
+    customMetricDefinitions,
+    customChartDefinitions,
+    customSamples,
     latestNetworkRx,
     latestNetworkTx,
     latestNetworkTotal,
-    syncGroup,
     events,
     editableEvents,
     eventBusyAction,
@@ -81,12 +96,59 @@ export function MonitorChartsPanel({
     const [focusRequest, setFocusRequest] = useState<ChartFocusRequest | null>(
         null
     );
+    const [rangeRequest, setRangeRequest] = useState<ChartRangeRequest | null>(
+        null
+    );
+    const metricDefinitionMap = getDeepMonitorMetricDefinitionMap(
+        customMetricDefinitions
+    );
+    const sortedCustomSamples = getSortedDeepMonitorSamples(customSamples);
+    const sortedCustomCharts = getSortedCustomChartDefinitions(
+        customChartDefinitions
+    );
+    const sharedTimeDomain = getChartTimeDomain(
+        samples,
+        sortedCustomSamples,
+        events
+    );
+
+    function requestFocusTimestamp(timestamp: number): void {
+        const normalizedTimestamp = Math.floor(timestamp);
+
+        setFocusRequest((current) => {
+            if (current?.timestamp === normalizedTimestamp) {
+                return current;
+            }
+
+            return {
+                id: (current?.id ?? 0) + 1,
+                timestamp: normalizedTimestamp
+            };
+        });
+    }
+
+    function requestVisibleTimeRange(range: ChartTimeDomain): void {
+        const startTimestamp = Math.floor(range.startTimestamp);
+        const endTimestamp = Math.ceil(range.endTimestamp);
+
+        setRangeRequest((current) => {
+            if (
+                current?.startTimestamp === startTimestamp &&
+                current.endTimestamp === endTimestamp
+            ) {
+                return current;
+            }
+
+            return {
+                id: (current?.id ?? 0) + 1,
+                startTimestamp,
+                endTimestamp
+            };
+        });
+    }
 
     function handleLocateTimestamp(timestamp: number): void {
-        setFocusRequest((current) => ({
-            id: (current?.id ?? 0) + 1,
-            timestamp
-        }));
+        requestFocusTimestamp(timestamp);
     }
 
     return (
@@ -113,9 +175,12 @@ export function MonitorChartsPanel({
                 <MetricChart
                     title="帧率（FPS）"
                     samples={samples}
+                    timeDomain={sharedTimeDomain}
                     events={events}
                     focusRequest={focusRequest}
-                    syncGroup={syncGroup}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
@@ -125,9 +190,12 @@ export function MonitorChartsPanel({
                 <MetricChart
                     title="负载（App CPU / Total CPU / GPU）"
                     samples={samples}
+                    timeDomain={sharedTimeDomain}
                     events={events}
                     focusRequest={focusRequest}
-                    syncGroup={syncGroup}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
@@ -137,9 +205,12 @@ export function MonitorChartsPanel({
                 <MetricChart
                     title="内存细分（MB）"
                     samples={samples}
+                    timeDomain={sharedTimeDomain}
                     events={events}
                     focusRequest={focusRequest}
-                    syncGroup={syncGroup}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
@@ -149,9 +220,12 @@ export function MonitorChartsPanel({
                 <MetricChart
                     title="资源吞吐（网络上下行速率 / 磁盘）"
                     samples={samples}
+                    timeDomain={sharedTimeDomain}
                     events={events}
                     focusRequest={focusRequest}
-                    syncGroup={syncGroup}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
@@ -161,13 +235,60 @@ export function MonitorChartsPanel({
                 <MetricChart
                     title="温度与功耗"
                     samples={samples}
+                    timeDomain={sharedTimeDomain}
                     events={events}
                     focusRequest={focusRequest}
-                    syncGroup={syncGroup}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
                     series={THERMAL_POWER_CHART_SERIES}
+                />
+
+                {sortedCustomCharts.map((chartDefinition) => {
+                    const series = getCustomChartSeries({
+                        chartDefinition,
+                        metricDefinitionMap
+                    });
+
+                    if (series.length === 0) {
+                        return null;
+                    }
+
+                    return (
+                        <MetricChart
+                            key={chartDefinition.id}
+                            title={chartDefinition.title}
+                            samples={sortedCustomSamples}
+                            timeDomain={sharedTimeDomain}
+                            events={events}
+                            focusRequest={focusRequest}
+                            rangeRequest={rangeRequest}
+                            onTimestampFocus={requestFocusTimestamp}
+                            onVisibleTimeRangeChange={
+                                requestVisibleTimeRange
+                            }
+                            onAddEventAtTimestamp={
+                                editableEvents
+                                    ? setRequestedCreateTimestamp
+                                    : undefined
+                            }
+                            series={series}
+                        />
+                    );
+                })}
+
+                <DeepMonitorStateTimelinePanel
+                    metricDefinitions={customMetricDefinitions}
+                    chartDefinitions={customChartDefinitions}
+                    samples={customSamples}
+                    timeDomain={sharedTimeDomain}
+                    focusRequest={focusRequest}
+                    rangeRequest={rangeRequest}
+                    onTimestampFocus={requestFocusTimestamp}
+                    onTimeRangeFocus={requestVisibleTimeRange}
                 />
 
                 <TimelineEventsPanel

@@ -1,6 +1,7 @@
 import type {
     ConnectedDevice,
     CpuUsageMode,
+    DeepMonitorSessionState,
     DeviceInfo,
     FpsDebugInfo,
     FpsMode,
@@ -29,6 +30,8 @@ interface MonitorSidebarProps {
     onFpsModeChange: (value: FpsMode) => void;
     cpuMode: CpuUsageMode;
     onCpuModeChange: (value: CpuUsageMode) => void;
+    deepMonitorEnabled: boolean;
+    onDeepMonitorEnabledChange: (value: boolean) => void;
     sampleIntervalMs: number;
     onSampleIntervalChange: (value: number) => void;
     screenshotEnabled: boolean;
@@ -42,6 +45,7 @@ interface MonitorSidebarProps {
     onStop: () => void;
     fpsDebug: FpsDebugInfo | null;
     capabilityReport: MetricCapabilityReport | null;
+    deepMonitorState?: DeepMonitorSessionState;
 }
 
 export function MonitorSidebar({
@@ -60,6 +64,8 @@ export function MonitorSidebar({
     onFpsModeChange,
     cpuMode,
     onCpuModeChange,
+    deepMonitorEnabled,
+    onDeepMonitorEnabledChange,
     sampleIntervalMs,
     onSampleIntervalChange,
     screenshotEnabled,
@@ -72,8 +78,39 @@ export function MonitorSidebar({
     onStart,
     onStop,
     fpsDebug,
-    capabilityReport
+    capabilityReport,
+    deepMonitorState
 }: MonitorSidebarProps) {
+    function formatDeepMonitorPhase(
+        phase: DeepMonitorSessionState["phase"] | undefined
+    ): string {
+        switch (phase) {
+            case "waiting-for-client":
+                return "等待客户端连接";
+            case "connected":
+                return "客户端已连接";
+            case "negotiating":
+                return "协商中";
+            case "ready":
+                return "协议就绪";
+            case "streaming":
+                return "数据接收中";
+            case "rejected":
+                return "连接被拒绝";
+            case "closed":
+                return "已关闭";
+            case "error":
+                return "错误";
+            case "idle":
+            default:
+                return "空闲";
+        }
+    }
+
+    const discoveryUrl = deepMonitorState?.discovery
+        ? `http://${deepMonitorState.discovery.host}:${deepMonitorState.discovery.port}${deepMonitorState.discovery.path}`
+        : null;
+
     return (
         <aside className={styles.sidebar}>
             <div className={styles.section}>
@@ -247,6 +284,17 @@ export function MonitorSidebar({
                         </select>
                     </label>
 
+                    <label className={styles.checkboxLabel}>
+                        <input
+                            type="checkbox"
+                            checked={deepMonitorEnabled}
+                            onChange={(event) =>
+                                onDeepMonitorEnabledChange(event.target.checked)
+                            }
+                        />
+                        启用深度监测（TCP Socket）
+                    </label>
+
                     <label>
                         采样间隔(ms)
                         <input
@@ -321,6 +369,72 @@ export function MonitorSidebar({
                 {errorMessage ? (
                     <pre className={styles.error}>{errorMessage}</pre>
                 ) : null}
+            </div>
+
+            <div className={styles.section}>
+                <h3>深度监测</h3>
+                {deepMonitorEnabled ? (
+                    <>
+                        <div className={styles.kvList}>
+                            <div>
+                                <span>状态</span>
+                                <strong>
+                                    {formatDeepMonitorPhase(
+                                        deepMonitorState?.phase
+                                    )}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>端口</span>
+                                <strong>{deepMonitorState?.port ?? "-"}</strong>
+                            </div>
+                            <div>
+                                <span>发现端点</span>
+                                <strong className={styles.path}>
+                                    {discoveryUrl ?? "-"}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>协议版本</span>
+                                <strong>
+                                    {deepMonitorState?.protocolVersion ?? "-"}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Schema Revision</span>
+                                <strong>
+                                    {deepMonitorState?.activeSchemaRevision ??
+                                        "-"}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>连接 Token</span>
+                                <strong className={styles.path}>
+                                    {deepMonitorState?.authToken ?? "-"}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <p className={styles.tip}>
+                            监控启动后会同时暴露固定 discovery HTTP 端点和
+                            deep-monitor 数据 TCP 端口。手机应用应先请求
+                            discovery 端点获取当前 stream 端口与 sessionToken，
+                            再连接 TCP socket 发送 hello、schemaDeclare 和
+                            sampleBatch。
+                        </p>
+
+                        {deepMonitorState?.lastError ? (
+                            <p className={styles.debugWarn}>
+                                {deepMonitorState.lastError}
+                            </p>
+                        ) : null}
+                    </>
+                ) : (
+                    <p className={styles.placeholder}>
+                        当前未启用深度监测。启用后会在启动监控时建立 TCP
+                        Socket 服务并返回连接参数。
+                    </p>
+                )}
             </div>
 
             <div className={styles.section}>

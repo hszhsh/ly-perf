@@ -1,7 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
-import type { ExportResult, SessionDetail } from "@shared/types";
+import type {
+    DeepMonitorChartDefinition,
+    DeepMonitorMetricDefinition,
+    ExportResult,
+    SessionDetail
+} from "@shared/types";
 import { SessionStore } from "@main/services/SessionStore";
 
 const METRIC_NAMES = [
@@ -26,6 +31,218 @@ const METRIC_NAMES = [
 
 function toWebPath(value: string): string {
     return value.split(path.sep).join("/");
+}
+
+function serializeChartDefinitionStats(
+    definition: DeepMonitorChartDefinition
+): Record<string, string | number | boolean | null> {
+    return {
+        id: definition.id,
+        title: definition.title,
+        order: definition.order ?? null,
+        metricKeys: definition.metricKeys.join(", "),
+        description: definition.description ?? "",
+        yAxisLabel: definition.yAxisLabel ?? "",
+        yAxisUnit: definition.yAxisUnit ?? "",
+        statsEnabled: definition.stats.enabled,
+        statsScope: definition.stats.scope,
+        statsSurface: definition.stats.surface,
+        statsComputations: definition.stats.computations.join(", "),
+        statsMetricKeys: (definition.stats.metricKeys ?? []).join(", ")
+    };
+}
+
+function serializeCustomSampleValue(
+    value:
+        | NonNullable<SessionDetail["customSamples"]>[number]["values"][string]
+        | undefined
+): string | number | null {
+    if (Array.isArray(value)) {
+        return JSON.stringify(value);
+    }
+
+    return value ?? null;
+}
+
+function getCustomMetricDefinitionMap(
+    definitions: DeepMonitorMetricDefinition[] | undefined
+): Map<string, DeepMonitorMetricDefinition> {
+    return new Map((definitions ?? []).map((definition) => [definition.key, definition]));
+}
+
+function getCustomChartValueType(params: {
+    chartDefinition: DeepMonitorChartDefinition;
+    metricDefinitionMap: Map<string, DeepMonitorMetricDefinition>;
+}): DeepMonitorMetricDefinition["valueType"] | null {
+    const { chartDefinition, metricDefinitionMap } = params;
+    const firstMetricKey = chartDefinition.metricKeys[0];
+
+    if (!firstMetricKey) {
+        return null;
+    }
+
+    return metricDefinitionMap.get(firstMetricKey)?.valueType ?? null;
+}
+
+function isStateSampleValue(
+    value:
+        | NonNullable<SessionDetail["customSamples"]>[number]["values"][string]
+        | undefined
+): value is string | string[] | null {
+    return (
+        value === null ||
+        typeof value === "string" ||
+        (Array.isArray(value) && value.every((item) => typeof item === "string"))
+    );
+}
+
+function getStateValueKey(value: string | string[] | null): string {
+    if (value === null) {
+        return "null";
+    }
+
+    if (typeof value === "string") {
+        return `string:${value}`;
+    }
+
+    return `string-list:${JSON.stringify(value)}`;
+}
+
+function buildCustomStateIntervalRows(
+    session: SessionDetail
+): Array<Record<string, string | number | null>> {
+    const metricDefinitionMap = getCustomMetricDefinitionMap(
+        session.customMetricDefinitions
+    );
+    const sortedCustomSamples = [...(session.customSamples ?? [])].sort(
+        (left, right) => {
+            if (left.timestamp !== right.timestamp) {
+                return left.timestamp - right.timestamp;
+            }
+
+            if (left.receivedAt !== right.receivedAt) {
+                return left.receivedAt - right.receivedAt;
+            }
+
+            return (left.sequence ?? 0) - (right.sequence ?? 0);
+        }
+    );
+
+    return (session.customChartDefinitions ?? [])
+        .filter(
+            (chartDefinition) =>
+                getCustomChartValueType({
+                    chartDefinition,
+                    metricDefinitionMap
+                }) !== "number"
+        )
+        .flatMap((chartDefinition) =>
+            chartDefinition.metricKeys.flatMap((metricKey) => {
+                const definition = metricDefinitionMap.get(metricKey);
+
+                if (
+                    !definition ||
+                    (definition.valueType !== "string" &&
+                        definition.valueType !== "string-list")
+                ) {
+                    return [];
+                }
+
+                const rows: Array<Record<string, string | number | null>> = [];
+                let currentInterval:
+                    | (Record<string, string | number | null> & {
+                          valueKey: string;
+                      })
+                    | null = null;
+
+                for (const sample of sortedCustomSamples) {
+                    const rawValue = sample.values[metricKey];
+
+                    if (!isStateSampleValue(rawValue)) {
+                        currentInterval = null;
+                        continue;
+                    }
+
+                    const value = Array.isArray(rawValue)
+                        ? [...rawValue]
+                        : rawValue;
+                    const valueKey = getStateValueKey(value);
+
+                    if (currentInterval && currentInterval.valueKey === valueKey) {
+                        currentInterval.endTimestamp = new Date(
+                            sample.timestamp
+                        ).toISOString();
+                        currentInterval.durationMs = Math.max(
+                            0,
+                            sample.timestamp - Date.parse(String(currentInterval.startTimestamp))
+                        );
+                        currentInterval.sampleCount =
+                            Number(currentInterval.sampleCount) + 1;
+                        continue;
+                    }
+
+                    currentInterval = {
+                        chartId: chartDefinition.id,
+                        chartTitle: chartDefinition.title,
+                        metricKey,
+                        metricLabel: definition.label,
+                        valueType: definition.valueType,
+                        startTimestamp: new Date(sample.timestamp).toISOString(),
+                        endTimestamp: new Date(sample.timestamp).toISOString(),
+                        durationMs: 0,
+                        sampleCount: 1,
+                        value: serializeCustomSampleValue(value),
+                        valueKey
+                    };
+                    rows.push(currentInterval);
+                }
+
+                return rows.map(({ valueKey: _valueKey, ...row }) => row);
+            })
+        );
+}
+
+function buildCustomSampleRows(session: SessionDetail) {
+    const metricKeys =
+        session.customMetricDefinitions?.map((definition) => definition.key) ??
+        Array.from(
+            new Set(
+                (session.customSamples ?? []).flatMap((sample) =>
+                    Object.keys(sample.values)
+                )
+            )
+        );
+
+    return (session.customSamples ?? []).map((sample) => {
+        const row: Record<string, number | string | null> = {
+            timestamp: new Date(sample.timestamp).toISOString(),
+            receivedAt: new Date(sample.receivedAt).toISOString(),
+            schemaRevision: sample.schemaRevision,
+            sequence: sample.sequence ?? null
+        };
+
+        for (const metricKey of metricKeys) {
+            row[metricKey] = serializeCustomSampleValue(
+                sample.values[metricKey]
+            );
+        }
+
+        return row;
+    });
+}
+
+function buildCustomMetricDefinitionRows(
+    definitions: DeepMonitorMetricDefinition[] | undefined
+): Array<Record<string, string | null>> {
+    return (definitions ?? []).map((definition) => ({
+        key: definition.key,
+        label: definition.label,
+        unit: definition.unit,
+        color: definition.color ?? "",
+        valueType: definition.valueType,
+        aggregationHint: definition.aggregationHint ?? "",
+        description: definition.description ?? ""
+    }));
 }
 
 export class ReportService {
@@ -141,6 +358,76 @@ export class ReportService {
         XLSX.utils.book_append_sheet(workbook, worksheet, "metrics");
         XLSX.utils.book_append_sheet(workbook, eventWorksheet, "events");
 
+        if ((session.customMetricDefinitions?.length ?? 0) > 0) {
+            const customMetricWorksheet = XLSX.utils.json_to_sheet(
+                buildCustomMetricDefinitionRows(session.customMetricDefinitions)
+            );
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                customMetricWorksheet,
+                "custom_metrics"
+            );
+        }
+
+        if ((session.customChartDefinitions?.length ?? 0) > 0) {
+            const customChartWorksheet = XLSX.utils.json_to_sheet(
+                (session.customChartDefinitions ?? []).map((definition) =>
+                    serializeChartDefinitionStats(definition)
+                )
+            );
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                customChartWorksheet,
+                "custom_charts"
+            );
+        }
+
+        if ((session.customSchemaHistory?.length ?? 0) > 0) {
+            const schemaWorksheet = XLSX.utils.json_to_sheet(
+                (session.customSchemaHistory ?? []).map((revision) => ({
+                    revision: revision.revision,
+                    declaredAt: new Date(revision.declaredAt).toISOString(),
+                    protocolVersion: revision.protocolVersion ?? null,
+                    metricCount: revision.metrics.length,
+                    chartCount: revision.charts.length
+                }))
+            );
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                schemaWorksheet,
+                "custom_schema_history"
+            );
+        }
+
+        if ((session.customSamples?.length ?? 0) > 0) {
+            const customSampleWorksheet = XLSX.utils.json_to_sheet(
+                buildCustomSampleRows(session)
+            );
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                customSampleWorksheet,
+                "custom_samples"
+            );
+        }
+
+        const customStateIntervalRows = buildCustomStateIntervalRows(session);
+
+        if (customStateIntervalRows.length > 0) {
+            const customStateWorksheet = XLSX.utils.json_to_sheet(
+                customStateIntervalRows
+            );
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                customStateWorksheet,
+                "custom_state_intervals"
+            );
+        }
+
         const outputPath = path.join(outputDir, `${sessionId}.xlsx`);
         XLSX.writeFile(workbook, outputPath);
 
@@ -208,13 +495,13 @@ export class ReportService {
         <style>
             body {
                 margin: 0;
-                background: radial-gradient(circle at 20% 20%, #2f4156, #18212d 60%, #10151f 100%);
+                background: radial-gradient(circle at 18% 16%, #32475d, #18212d 58%, #10151f 100%);
                 color: #dbe4ee;
                 font-family: "Bahnschrift", "Trebuchet MS", sans-serif;
             }
             .wrap {
                 display: grid;
-                grid-template-columns: 2fr 1fr;
+                grid-template-columns: minmax(0, 2.1fr) minmax(300px, 0.9fr);
                 gap: 12px;
                 padding: 12px;
                 min-height: 100vh;
@@ -226,11 +513,115 @@ export class ReportService {
                 border-radius: 12px;
                 overflow: hidden;
             }
-            #chart {
-                height: 82vh;
+            .chartStack {
+                display: grid;
+                gap: 12px;
+                padding: 12px;
+            }
+            .chartCard {
+                background: rgba(12, 19, 29, 0.76);
+                border: 1px solid rgba(102, 128, 153, 0.24);
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .chartHead {
+                display: grid;
+                gap: 4px;
+                padding: 12px 14px;
+                border-bottom: 1px solid rgba(102, 128, 153, 0.22);
+            }
+            .chartHead strong {
+                font-size: 14px;
+                letter-spacing: 0.04em;
+            }
+            .chartHead span {
+                font-size: 11px;
+                color: #91a7c0;
+            }
+            .chartSurface {
+                height: 320px;
+            }
+            .stateTrackStack {
+                display: grid;
+                gap: 10px;
+                padding: 12px;
+            }
+            .stateTrack {
+                display: grid;
+                gap: 8px;
+                padding: 10px;
+                border-radius: 10px;
+                border: 1px solid rgba(116, 145, 171, 0.16);
+                background: rgba(13, 21, 33, 0.72);
+            }
+            .stateTrackHeader,
+            .stateTrackTitle,
+            .stateSegmentHeader {
+                display: flex;
+                gap: 8px;
+            }
+            .stateTrackHeader,
+            .stateSegmentHeader {
+                align-items: flex-start;
+                justify-content: space-between;
+                flex-wrap: wrap;
+            }
+            .stateTrackTitle {
+                align-items: center;
+            }
+            .stateColorDot {
+                width: 10px;
+                height: 10px;
+                border-radius: 999px;
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+            }
+            .stateTrackTitle strong {
+                font-size: 12px;
+                color: #eff6ff;
+            }
+            .stateTrackMeta,
+            .stateSegmentTime,
+            .stateSegmentMeta,
+            .stateSegmentCount {
+                font-size: 11px;
+                color: #8ea1b7;
+            }
+            .stateSegmentList {
+                display: grid;
+                gap: 8px;
+            }
+            .stateSegment {
+                width: 100%;
+                text-align: left;
+                display: grid;
+                gap: 6px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                border: 1px solid rgba(116, 145, 171, 0.18);
+                border-left: 4px solid var(--segment-accent, #7dd3fc);
+                background: rgba(8, 14, 23, 0.82);
+            }
+            .stateSegment:hover {
+                border-color: rgba(130, 199, 255, 0.4);
+                background: rgba(10, 18, 28, 0.92);
+            }
+            .stateSegmentValue {
+                font-size: 12px;
+                color: #eff6ff;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .stateEmpty {
+                margin: 0;
+                padding: 12px;
+                color: #91a7c0;
+                font-size: 12px;
             }
             .preview {
                 padding: 10px;
+                position: sticky;
+                top: 12px;
+                height: fit-content;
             }
             .preview img {
                 width: 100%;
@@ -242,6 +633,7 @@ export class ReportService {
                 font-size: 12px;
                 color: #8ca0b8;
                 margin-bottom: 8px;
+                line-height: 1.5;
             }
             .title {
                 margin: 0;
@@ -249,13 +641,20 @@ export class ReportService {
                 border-bottom: 1px solid rgba(102, 128, 153, 0.35);
                 letter-spacing: 0.4px;
             }
+            .empty {
+                margin: 0;
+                padding: 24px 16px;
+                color: #91a7c0;
+                text-align: center;
+            }
         </style>
     </head>
     <body>
         <div class="wrap">
             <section class="panel">
                 <h3 class="title">Performance Timeline</h3>
-                <div id="chart"></div>
+                <div id="charts" class="chartStack"></div>
+                <div id="states" class="chartStack"></div>
             </section>
             <section class="panel preview">
                 <div id="meta" class="meta"></div>
@@ -264,25 +663,60 @@ export class ReportService {
         </div>
 
         <script>
-            const METRICS = [
-                "fps",
-                "jank",
-                "bigJank",
-                "cpu",
-                "cpuTotal",
-                "memory",
-                "memoryGraphics",
-                "memoryNativeHeap",
-                "memoryPrivateOther",
-                "networkRx",
-                "networkTx",
-                "networkTotal",
-                "diskRead",
-                "diskWrite",
-                "gpu",
-                "power",
-                "temperature"
+            const BUILTIN_CHARTS = [
+                {
+                    id: "builtin-fps",
+                    title: "帧率（FPS）",
+                    description: "内置采样指标",
+                    series: [
+                        { key: "fps", name: "FPS", color: "#e24a6e" },
+                        { key: "jank", name: "Jank", color: "#f4b860" },
+                        { key: "bigJank", name: "Big Jank", color: "#ff7a59" }
+                    ]
+                },
+                {
+                    id: "builtin-load",
+                    title: "负载（App CPU / Total CPU / GPU）",
+                    description: "内置采样指标",
+                    series: [
+                        { key: "cpu", name: "App CPU(%)", color: "#5ca6ff" },
+                        { key: "cpuTotal", name: "Total CPU(%)", color: "#59d6d6" },
+                        { key: "gpu", name: "GPU(%)", color: "#7bd389" }
+                    ]
+                },
+                {
+                    id: "builtin-memory",
+                    title: "内存细分（MB）",
+                    description: "内置采样指标",
+                    series: [
+                        { key: "memory", name: "PSS Total", color: "#f4b860" },
+                        { key: "memoryGraphics", name: "Graphics", color: "#4fc3f7" },
+                        { key: "memoryNativeHeap", name: "Native Heap", color: "#81c784" },
+                        { key: "memoryPrivateOther", name: "Private Other", color: "#ff8a65" }
+                    ]
+                },
+                {
+                    id: "builtin-throughput",
+                    title: "资源吞吐（网络上下行速率 / 磁盘）",
+                    description: "内置采样指标",
+                    series: [
+                        { key: "networkRx", name: "下行 KB/s", color: "#4dd0e1" },
+                        { key: "networkTx", name: "上行 KB/s", color: "#26a69a" },
+                        { key: "diskRead", name: "Disk Read", color: "#ab47bc" },
+                        { key: "diskWrite", name: "Disk Write", color: "#7e57c2" }
+                    ]
+                },
+                {
+                    id: "builtin-thermal-power",
+                    title: "温度与功耗",
+                    description: "内置采样指标",
+                    series: [
+                        { key: "temperature", name: "Temperature(°C)", color: "#ff7043" },
+                        { key: "power", name: "Power(mA)", color: "#ffee58" }
+                    ]
+                }
             ];
+            const CUSTOM_COLORS = ["#4dd0e1", "#ff8a65", "#7bd389", "#ffd54f", "#9575cd", "#f06292", "#64b5f6", "#90a4ae"];
 
             function formatAxisTime(timestamp) {
                 return new Date(timestamp).toLocaleTimeString([], {
@@ -357,6 +791,18 @@ export class ReportService {
                 ].join('');
             }
 
+            function renderTooltipMetricRow(color, label, value) {
+                return [
+                    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(140, 160, 184, 0.1);">',
+                    '<div style="display:flex;align-items:center;gap:8px;min-width:0;">',
+                    renderTooltipColorDot(color, 8),
+                    '<span style="font-size:12px;color:#d7e2ef;min-width:0;">' + escapeHtml(label) + '</span>',
+                    '</div>',
+                    '<span style="font-size:12px;font-weight:600;color:#eff6ff;text-align:right;">' + escapeHtml(value) + '</span>',
+                    '</div>'
+                ].join('');
+            }
+
             function renderEventTooltipCard(data) {
                 const metaParts = [data.eventTimeLabel, data.eventSampleLabel].filter(Boolean);
 
@@ -374,6 +820,20 @@ export class ReportService {
                     '<div style="font-size:12px;line-height:1.5;white-space:pre-wrap;color:#e9f2fd;">' + escapeHtml(data.eventFullText || '') + '</div>',
                     '</div>'
                 ].join('');
+            }
+
+            function formatTooltipMetricValue(value) {
+                if (value === null || value === undefined || value === '-') {
+                    return 'N/A';
+                }
+
+                if (typeof value === 'number') {
+                    return Number.isFinite(value)
+                        ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                        : 'N/A';
+                }
+
+                return String(value);
             }
 
             function findNearestSampleIndex(samples, timestamp) {
@@ -413,10 +873,48 @@ export class ReportService {
                 return previousDistance <= nextDistance ? high : low;
             }
 
+            function getAverageSampleInterval(samples) {
+                if (samples.length <= 1) {
+                    return 1000;
+                }
+
+                const firstTimestamp = samples[0].timestamp;
+                const lastTimestamp = samples[samples.length - 1].timestamp;
+                return Math.max(1, (lastTimestamp - firstTimestamp) / (samples.length - 1));
+            }
+
             function getEventSampleLabel(samples, timestamp) {
                 const sampleIndex = findNearestSampleIndex(samples, timestamp);
+                return sampleIndex >= 0 ? '样本 ' + (sampleIndex + 1) : undefined;
+            }
 
-                return sampleIndex >= 0 ? "样本 " + (sampleIndex + 1) : undefined;
+            function getEventsNearTimestamp(events, samples, timestamp) {
+                if (!events.length) {
+                    return [];
+                }
+
+                const tolerance = Math.max(getAverageSampleInterval(samples) * 0.75, 500);
+                return events.filter((event) => Math.abs(event.timestamp - timestamp) <= tolerance);
+            }
+
+            function buildEventMarkerData(events, samples) {
+                return events.map((event) => ({
+                    xAxis: event.timestamp,
+                    eventText: event.text.length > 18 ? event.text.slice(0, 18) + '...' : event.text,
+                    eventFullText: event.text,
+                    eventColor: event.color,
+                    eventTypeLabel: getTimelineEventTypeLabel(event.type),
+                    eventTimeLabel: formatMetaTime(event.timestamp),
+                    eventSampleLabel: getEventSampleLabel(samples, event.timestamp),
+                    lineStyle: {
+                        color: event.color,
+                        width: 1.5,
+                        opacity: 0.88
+                    },
+                    label: {
+                        color: event.color
+                    }
+                }));
             }
 
             function formatMarkerTooltip(data) {
@@ -426,132 +924,598 @@ export class ReportService {
                         title: data.eventTypeLabel || '事件',
                         meta: data.eventTimeLabel,
                         accentColor: data.eventColor
-                    }) +
-                    renderEventTooltipCard(data)
+                    }) + renderEventTooltipCard(data)
                 );
             }
 
-            fetch("./report.json")
-                .then((res) => res.json())
-                .then((report) => {
-                    const chart = echarts.init(document.getElementById("chart"));
-                    const events = report.events || [];
+            function formatAxisTooltip(params, events, samples) {
+                const axisParams = Array.isArray(params) ? params : [params];
+                if (!axisParams.length) {
+                    return '';
+                }
 
-                    const series = METRICS.map((name, index) => ({
-                        type: "line",
-                        name,
+                const firstParam = axisParams[0] || {};
+                const axisTimestamp = Array.isArray(firstParam.value)
+                    ? Number(firstParam.value[0])
+                    : Number(firstParam.axisValue);
+                const relatedEvents = Number.isFinite(axisTimestamp)
+                    ? getEventsNearTimestamp(events, samples, axisTimestamp)
+                    : [];
+                const sampleLabel = Number.isFinite(axisTimestamp)
+                    ? getEventSampleLabel(samples, axisTimestamp)
+                    : undefined;
+
+                const metricRows = axisParams.map((item) => {
+                    const rawValue = Array.isArray(item.value) ? item.value[1] : item.value;
+                    return renderTooltipMetricRow(item.color || '#7dd3fc', item.seriesName || '指标', formatTooltipMetricValue(rawValue));
+                });
+
+                const sections = [
+                    renderTooltipHeader({
+                        eyebrow: 'Timeline Sample',
+                        title: Number.isFinite(axisTimestamp) ? formatMetaTime(axisTimestamp) : '当前时间点',
+                        meta: sampleLabel
+                    }),
+                    '<div style="display:grid;gap:0;">' + metricRows.join('') + '</div>'
+                ];
+
+                if (relatedEvents.length > 0) {
+                    sections.push(
+                        '<div style="display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(140, 160, 184, 0.18);">' +
+                            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+                                renderTooltipBadge('关联事件') +
+                                '<span style="font-size:11px;color:#8ea1b7;">' + relatedEvents.length + ' 条</span>' +
+                            '</div>' +
+                            relatedEvents.map((event) => renderEventTooltipCard({
+                                eventColor: event.color,
+                                eventTypeLabel: getTimelineEventTypeLabel(event.type),
+                                eventTimeLabel: formatMetaTime(event.timestamp),
+                                eventFullText: event.text,
+                                eventSampleLabel: getEventSampleLabel(samples, event.timestamp)
+                            })).join('') +
+                        '</div>'
+                    );
+                }
+
+                return renderTooltipSurface(sections.join(''));
+            }
+
+            function createChartCard(host, config) {
+                const card = document.createElement('div');
+                card.className = 'chartCard';
+                card.innerHTML =
+                    '<div class="chartHead">' +
+                        '<strong>' + escapeHtml(config.title) + '</strong>' +
+                        '<span>' + escapeHtml(config.description || '') + '</span>' +
+                    '</div>' +
+                    '<div class="chartSurface"></div>';
+                host.appendChild(card);
+                return card.querySelector('.chartSurface');
+            }
+
+            function getCustomMetricDefinitionMap(report) {
+                const map = new Map();
+                (report.customMetricDefinitions || []).forEach((definition) => {
+                    map.set(definition.key, definition);
+                });
+                return map;
+            }
+
+            function getSortedCustomSamples(report) {
+                return (report.customSamples || []).slice().sort((left, right) => {
+                    if (left.timestamp !== right.timestamp) {
+                        return left.timestamp - right.timestamp;
+                    }
+
+                    if (left.receivedAt !== right.receivedAt) {
+                        return left.receivedAt - right.receivedAt;
+                    }
+
+                    return (left.sequence || 0) - (right.sequence || 0);
+                });
+            }
+
+            function getSortedCustomCharts(report) {
+                return (report.customChartDefinitions || [])
+                    .filter((definition) => Array.isArray(definition.metricKeys) && definition.metricKeys.length > 0)
+                    .slice()
+                    .sort((left, right) => {
+                        const leftOrder = left.order == null ? Number.MAX_SAFE_INTEGER : left.order;
+                        const rightOrder = right.order == null ? Number.MAX_SAFE_INTEGER : right.order;
+
+                        if (leftOrder !== rightOrder) {
+                            return leftOrder - rightOrder;
+                        }
+
+                        return String(left.title || '').localeCompare(String(right.title || ''), 'zh-CN');
+                    });
+            }
+
+            function getCustomChartValueTypeFromMap(chartDefinition, metricDefinitionMap) {
+                const firstMetricKey = chartDefinition.metricKeys && chartDefinition.metricKeys[0];
+
+                if (!firstMetricKey) {
+                    return null;
+                }
+
+                const definition = metricDefinitionMap.get(firstMetricKey);
+                return definition && definition.valueType ? definition.valueType : null;
+            }
+
+            function isStateValue(value) {
+                return value === null || typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+            }
+
+            function getStateValueKey(value) {
+                if (value === null) {
+                    return 'null';
+                }
+
+                if (typeof value === 'string') {
+                    return 'string:' + value;
+                }
+
+                return 'string-list:' + JSON.stringify(value);
+            }
+
+            function formatStateValue(value) {
+                if (value === null) {
+                    return 'N/A';
+                }
+
+                if (typeof value === 'string') {
+                    return value.length > 0 ? value : '(empty)';
+                }
+
+                return value.length > 0 ? value.join(', ') : '(empty list)';
+            }
+
+            function formatDurationLabel(durationMs) {
+                if (durationMs <= 0) {
+                    return 'single sample';
+                }
+
+                if (durationMs < 1000) {
+                    return Math.round(durationMs) + ' ms';
+                }
+
+                if (durationMs < 60000) {
+                    return (durationMs / 1000).toFixed(1) + ' s';
+                }
+
+                if (durationMs < 3600000) {
+                    return (durationMs / 60000).toFixed(1) + ' min';
+                }
+
+                return (durationMs / 3600000).toFixed(1) + ' h';
+            }
+
+            function getSampleTimeDomain(samples) {
+                if (!samples || samples.length === 0) {
+                    return null;
+                }
+
+                const firstTimestamp = Number(samples[0] && samples[0].timestamp);
+                const lastTimestamp = Number(samples[samples.length - 1] && samples[samples.length - 1].timestamp);
+
+                if (!Number.isFinite(firstTimestamp) || !Number.isFinite(lastTimestamp) || lastTimestamp <= firstTimestamp) {
+                    return null;
+                }
+
+                return {
+                    startTimestamp: Math.floor(firstTimestamp),
+                    endTimestamp: Math.ceil(lastTimestamp)
+                };
+            }
+
+            function mergeTimeDomains(domains) {
+                const validDomains = domains.filter(Boolean);
+
+                if (!validDomains.length) {
+                    return null;
+                }
+
+                return {
+                    startTimestamp: Math.min.apply(
+                        null,
+                        validDomains.map((domain) => domain.startTimestamp)
+                    ),
+                    endTimestamp: Math.max.apply(
+                        null,
+                        validDomains.map((domain) => domain.endTimestamp)
+                    )
+                };
+            }
+
+            function buildSegmentFocusRange(segment, fullRange, averageSampleInterval) {
+                if (!fullRange) {
+                    return null;
+                }
+
+                const contextPadding = Math.max(250, Math.round(averageSampleInterval / 2));
+                const minimumWindow = Math.max(1000, Math.round(averageSampleInterval));
+                let startTimestamp = Math.floor(segment.startTimestamp - contextPadding);
+                let endTimestamp = Math.ceil(segment.endTimestamp + contextPadding);
+
+                if (endTimestamp - startTimestamp < minimumWindow) {
+                    const centerTimestamp = (segment.startTimestamp + segment.endTimestamp) / 2;
+                    startTimestamp = Math.floor(centerTimestamp - minimumWindow / 2);
+                    endTimestamp = Math.ceil(centerTimestamp + minimumWindow / 2);
+                }
+
+                startTimestamp = Math.max(fullRange.startTimestamp, startTimestamp);
+                endTimestamp = Math.min(fullRange.endTimestamp, endTimestamp);
+
+                if (endTimestamp <= startTimestamp) {
+                    return fullRange.endTimestamp > fullRange.startTimestamp
+                        ? fullRange
+                        : null;
+                }
+
+                return {
+                    startTimestamp,
+                    endTimestamp
+                };
+            }
+
+            function buildBuiltinChartConfigs(report) {
+                return BUILTIN_CHARTS.map((chart) => ({
+                    id: chart.id,
+                    title: chart.title,
+                    description: chart.description,
+                    samples: report.samples || [],
+                    series: chart.series.map((series) => ({
+                        type: 'line',
+                        name: series.name,
                         smooth: false,
                         showSymbol: false,
-                        data: report.samples.map((sample) => [sample.timestamp, sample.metrics?.[name]?.value ?? null]),
-                        markLine: index === 0 && events.length > 0
-                            ? {
-                                symbol: ["none", "none"],
-                                animation: false,
-                                lineStyle: {
-                                    width: 1.5
-                                },
-                                tooltip: {
-                                    appendToBody: true,
-                                    confine: true,
-                                    enterable: true,
-                                    backgroundColor: "transparent",
-                                    borderWidth: 0,
-                                    padding: 0,
-                                    extraCssText: "box-shadow:none;",
-                                    formatter: (params) => formatMarkerTooltip(params.data || {})
-                                },
-                                label: {
-                                    show: true,
-                                    position: "insideEndTop",
-                                    fontSize: 10,
-                                    formatter: (params) => params.data?.eventText || "事件"
-                                },
-                                data: events.map((event) => ({
-                                    xAxis: event.timestamp,
-                                    eventText: event.text.length > 18 ? event.text.slice(0, 18) + "..." : event.text,
-                                    eventFullText: event.text,
-                                    eventColor: event.color,
-                                    eventTypeLabel: getTimelineEventTypeLabel(event.type),
-                                    eventTimeLabel: formatMetaTime(event.timestamp),
-                                    eventSampleLabel: getEventSampleLabel(report.samples, event.timestamp),
-                                    lineStyle: {
-                                        color: event.color,
-                                        width: 1.5,
-                                        opacity: 0.88
-                                    },
-                                    label: {
-                                        color: event.color
-                                    }
-                                }))
-                            }
-                            : undefined
-                    }));
+                        itemStyle: { color: series.color },
+                        lineStyle: { color: series.color, width: 2 },
+                        data: (report.samples || []).map((sample) => [sample.timestamp, sample.metrics && sample.metrics[series.key] ? sample.metrics[series.key].value : null])
+                    }))
+                }));
+            }
 
-                    chart.setOption({
-                        tooltip: {
-                            trigger: "axis"
-                        },
-                        legend: {
-                            top: 8,
-                            textStyle: {
-                                color: "#cad5e2"
-                            }
-                        },
-                        grid: {
-                            left: 56,
-                            right: 24,
-                            top: 48,
-                            bottom: 70
-                        },
-                        xAxis: {
-                            type: "time",
-                            axisLabel: {
-                                color: "#9db0c7",
-                                formatter: (value) => formatAxisTime(Number(value))
-                            }
-                        },
-                        yAxis: {
-                            type: "value",
-                            axisLabel: { color: "#9db0c7" },
-                            splitLine: { lineStyle: { color: "rgba(140,160,184,0.2)" } }
-                        },
-                        dataZoom: [
-                            { type: "inside", filterMode: "none" },
-                            { type: "slider", filterMode: "none", height: 24, bottom: 18 }
-                        ],
-                        series
-                    });
+            function buildCustomChartConfigs(report) {
+                const metricDefinitionMap = getCustomMetricDefinitionMap(report);
+                const customSamples = getSortedCustomSamples(report);
 
-                    const shot = document.getElementById("shot");
-                    const meta = document.getElementById("meta");
-                    const sessionTitle = report.displayName || report.packageName;
+                return getSortedCustomCharts(report)
+                    .filter((chartDefinition) => getCustomChartValueTypeFromMap(chartDefinition, metricDefinitionMap) === 'number')
+                    .map((chartDefinition) => ({
+                    id: chartDefinition.id,
+                    title: chartDefinition.title,
+                    description: chartDefinition.description || '自定义指标图表',
+                    samples: customSamples,
+                    series: chartDefinition.metricKeys.map((metricKey, index) => {
+                        const definition = metricDefinitionMap.get(metricKey) || {};
+                        const color = definition.color || CUSTOM_COLORS[index % CUSTOM_COLORS.length];
 
-                    chart.on("updateAxisPointer", (event) => {
-                        const axisInfo = event.axesInfo && event.axesInfo[0];
-                        if (!axisInfo) {
-                            return;
+                        return {
+                            type: 'line',
+                            name: definition.label || metricKey,
+                            smooth: false,
+                            showSymbol: false,
+                            itemStyle: { color },
+                            lineStyle: { color, width: 2 },
+                            data: customSamples.map((sample) => [sample.timestamp, sample.values ? sample.values[metricKey] ?? null : null])
+                        };
+                    })
+                })).filter((chart) => chart.series.length > 0);
+            }
+
+            function buildCustomStateConfigs(report) {
+                const metricDefinitionMap = getCustomMetricDefinitionMap(report);
+                const customSamples = getSortedCustomSamples(report);
+
+                return getSortedCustomCharts(report)
+                    .filter((chartDefinition) => getCustomChartValueTypeFromMap(chartDefinition, metricDefinitionMap) !== 'number')
+                    .map((chartDefinition) => ({
+                        chartDefinition,
+                        tracks: (chartDefinition.metricKeys || []).map((metricKey, index) => {
+                            const definition = metricDefinitionMap.get(metricKey);
+
+                            if (!definition || (definition.valueType !== 'string' && definition.valueType !== 'string-list')) {
+                                return null;
+                            }
+
+                            const color = definition.color || CUSTOM_COLORS[index % CUSTOM_COLORS.length];
+                            const segments = [];
+                            let currentSegment = null;
+
+                            customSamples.forEach((sample) => {
+                                const rawValue = sample.values ? sample.values[metricKey] : undefined;
+
+                                if (!isStateValue(rawValue)) {
+                                    currentSegment = null;
+                                    return;
+                                }
+
+                                const value = Array.isArray(rawValue) ? rawValue.slice() : rawValue;
+                                const valueKey = getStateValueKey(value);
+
+                                if (currentSegment && currentSegment.valueKey === valueKey) {
+                                    currentSegment.endTimestamp = sample.timestamp;
+                                    currentSegment.sampleCount += 1;
+                                    return;
+                                }
+
+                                currentSegment = {
+                                    id: chartDefinition.id + ':' + metricKey + ':' + sample.timestamp + ':' + segments.length,
+                                    metricKey,
+                                    label: definition.label || metricKey,
+                                    color,
+                                    value,
+                                    formattedValue: formatStateValue(value),
+                                    valueKey,
+                                    startTimestamp: sample.timestamp,
+                                    endTimestamp: sample.timestamp,
+                                    sampleCount: 1
+                                };
+                                segments.push(currentSegment);
+                            });
+
+                            if (!segments.length) {
+                                return null;
+                            }
+
+                            return {
+                                metricKey,
+                                label: definition.label || metricKey,
+                                color,
+                                valueType: definition.valueType,
+                                segments
+                            };
+                        }).filter(Boolean)
+                    }))
+                    .filter((config) => config.tracks.length > 0);
+            }
+
+            function createStateCard(host, config, onSegmentSelect) {
+                const card = document.createElement('div');
+                card.className = 'chartCard';
+                card.innerHTML =
+                    '<div class="chartHead">' +
+                        '<strong>' + escapeHtml(config.chartDefinition.title) + '</strong>' +
+                        '<span>' + escapeHtml(config.chartDefinition.description || '非数值自定义指标按区间展示。') + '</span>' +
+                    '</div>';
+
+                const trackStack = document.createElement('div');
+                trackStack.className = 'stateTrackStack';
+
+                config.tracks.forEach((track) => {
+                    const trackNode = document.createElement('div');
+                    trackNode.className = 'stateTrack';
+                    trackNode.innerHTML =
+                        '<div class="stateTrackHeader">' +
+                            '<div class="stateTrackTitle">' +
+                                '<span class="stateColorDot" style="background:' + escapeHtml(track.color) + ';"></span>' +
+                                '<strong>' + escapeHtml(track.label) + '</strong>' +
+                            '</div>' +
+                            '<span class="stateTrackMeta">' + escapeHtml(track.valueType === 'string-list' ? 'String List' : 'String') + '</span>' +
+                        '</div>';
+
+                    if (track.segments.length > 0) {
+                        const segmentList = document.createElement('div');
+                        segmentList.className = 'stateSegmentList';
+
+                        track.segments.forEach((segment) => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'stateSegment';
+                            button.style.setProperty('--segment-accent', segment.color);
+                            button.innerHTML =
+                                '<div class="stateSegmentHeader">' +
+                                    '<span class="stateSegmentTime">' + escapeHtml(formatMetaTime(segment.startTimestamp) + (segment.startTimestamp === segment.endTimestamp ? '' : ' - ' + formatMetaTime(segment.endTimestamp))) + '</span>' +
+                                    '<span class="stateSegmentCount">' + segment.sampleCount + ' sample' + (segment.sampleCount === 1 ? '' : 's') + '</span>' +
+                                '</div>' +
+                                '<strong class="stateSegmentValue">' + escapeHtml(segment.formattedValue) + '</strong>' +
+                                '<span class="stateSegmentMeta">Duration: ' + escapeHtml(formatDurationLabel(segment.endTimestamp - segment.startTimestamp)) + '</span>';
+                            button.addEventListener('click', () => {
+                                onSegmentSelect(segment);
+                            });
+                            segmentList.appendChild(button);
+                        });
+
+                        trackNode.appendChild(segmentList);
+                    } else {
+                        const empty = document.createElement('p');
+                        empty.className = 'stateEmpty';
+                        empty.textContent = '暂无状态样本。';
+                        trackNode.appendChild(empty);
+                    }
+
+                    trackStack.appendChild(trackNode);
+                });
+
+                card.appendChild(trackStack);
+                host.appendChild(card);
+            }
+
+            function decorateSeriesWithEvents(series, events, samples) {
+                if (!series.length || !events.length || !samples.length) {
+                    return series;
+                }
+
+                return series.map((item, index) => index === 0
+                    ? Object.assign({}, item, {
+                        markLine: {
+                            symbol: ['none', 'none'],
+                            animation: false,
+                            lineStyle: { width: 1.5 },
+                            tooltip: {
+                                appendToBody: true,
+                                confine: true,
+                                enterable: true,
+                                backgroundColor: 'transparent',
+                                borderWidth: 0,
+                                padding: 0,
+                                extraCssText: 'box-shadow:none;',
+                                formatter: (params) => formatMarkerTooltip(params.data || {})
+                            },
+                            label: {
+                                show: true,
+                                position: 'insideEndTop',
+                                fontSize: 10,
+                                formatter: (params) => params.data && params.data.eventText ? params.data.eventText : '事件'
+                            },
+                            data: buildEventMarkerData(events, samples)
                         }
+                    })
+                    : item
+                );
+            }
 
-                        const index = findNearestSampleIndex(
-                            report.samples,
-                            Number(axisInfo.value)
+            function updatePreview(report, timestamp) {
+                const shot = document.getElementById('shot');
+                const meta = document.getElementById('meta');
+                const sessionTitle = report.displayName || report.packageName;
+                const samples = report.samples || [];
+                const index = findNearestSampleIndex(samples, timestamp);
+                const sample = index >= 0 ? samples[index] : null;
+
+                if (!sample) {
+                    meta.textContent = sessionTitle + ' | ' + report.serial;
+                    shot.removeAttribute('src');
+                    return;
+                }
+
+                meta.textContent = formatMetaTime(sample.timestamp) + ' | ' + sessionTitle + ' | ' + report.serial;
+
+                if (sample.screenshotPath) {
+                    shot.src = sample.screenshotPath;
+                }
+            }
+
+            fetch('./report.json')
+                .then((res) => res.json())
+                .then((report) => {
+                    const chartHost = document.getElementById('charts');
+                    const stateHost = document.getElementById('states');
+                    const events = report.events || [];
+                    const customSamples = getSortedCustomSamples(report);
+                    const chartConfigs = buildBuiltinChartConfigs(report).concat(buildCustomChartConfigs(report));
+                    const stateConfigs = buildCustomStateConfigs(report);
+                    const chartInstances = [];
+                    const reportTimeDomain = mergeTimeDomains([
+                        getSampleTimeDomain(report.samples || []),
+                        getSampleTimeDomain(customSamples),
+                        getSampleTimeDomain(events)
+                    ]);
+                    const customAverageSampleInterval = getAverageSampleInterval(customSamples);
+
+                    function focusChartsAtTimestamp(timestamp) {
+                        chartInstances.forEach(({ chart, samples }) => {
+                            const dataIndex = findNearestSampleIndex(samples, timestamp);
+                            if (dataIndex >= 0) {
+                                chart.dispatchAction({
+                                    type: 'showTip',
+                                    seriesIndex: 0,
+                                    dataIndex
+                                });
+                            }
+                        });
+
+                        updatePreview(report, timestamp);
+                    }
+
+                    function focusChartsAtSegment(segment) {
+                        const focusTimestamp = Math.floor((segment.startTimestamp + segment.endTimestamp) / 2);
+                        const focusRange = buildSegmentFocusRange(
+                            segment,
+                            reportTimeDomain,
+                            customAverageSampleInterval
                         );
-                        const sample = report.samples[index];
-                        if (!sample) {
-                            return;
+
+                        if (focusRange) {
+                            chartInstances.forEach(({ chart }) => {
+                                chart.dispatchAction({
+                                    type: 'dataZoom',
+                                    startValue: focusRange.startTimestamp,
+                                    endValue: focusRange.endTimestamp,
+                                    escapeConnect: true
+                                });
+                            });
                         }
 
-                        meta.textContent =
-                            formatMetaTime(sample.timestamp) +
-                            " | " +
-                            sessionTitle +
-                            " | " +
-                            report.serial;
+                        focusChartsAtTimestamp(focusTimestamp);
+                    }
 
-                        if (sample.screenshotPath) {
-                            shot.src = sample.screenshotPath;
-                        }
+                    if (!chartConfigs.length && !stateConfigs.length) {
+                        chartHost.innerHTML = '<p class="empty">该历史会话暂无可导出的趋势图数据。</p>';
+                        updatePreview(report, Date.now());
+                        return;
+                    }
+
+                    chartConfigs.forEach((config) => {
+                        const mountNode = createChartCard(chartHost, config);
+                        const chart = echarts.init(mountNode);
+                        chart.group = 'ly-perf-html-report-sync';
+                        echarts.connect('ly-perf-html-report-sync');
+                        chartInstances.push({ chart, samples: config.samples });
+
+                        chart.setOption({
+                            tooltip: {
+                                trigger: 'axis',
+                                appendToBody: true,
+                                confine: true,
+                                enterable: true,
+                                backgroundColor: 'transparent',
+                                borderWidth: 0,
+                                padding: 0,
+                                extraCssText: 'box-shadow:none;',
+                                formatter: (params) => formatAxisTooltip(params, events, config.samples)
+                            },
+                            legend: {
+                                top: 8,
+                                textStyle: { color: '#cad5e2' }
+                            },
+                            grid: {
+                                left: 56,
+                                right: 24,
+                                top: 48,
+                                bottom: 70
+                            },
+                            xAxis: {
+                                type: 'time',
+                                axisLabel: {
+                                    color: '#9db0c7',
+                                    formatter: (value) => formatAxisTime(Number(value))
+                                }
+                            },
+                            yAxis: {
+                                type: 'value',
+                                axisLabel: { color: '#9db0c7' },
+                                splitLine: { lineStyle: { color: 'rgba(140,160,184,0.2)' } }
+                            },
+                            dataZoom: [
+                                { type: 'inside', filterMode: 'none' },
+                                { type: 'slider', filterMode: 'none', height: 24, bottom: 18 }
+                            ],
+                            series: decorateSeriesWithEvents(config.series, events, config.samples)
+                        });
+
+                        chart.on('updateAxisPointer', (event) => {
+                            const axisInfo = event.axesInfo && event.axesInfo[0];
+                            if (!axisInfo) {
+                                return;
+                            }
+
+                            const timestamp = Number(axisInfo.value);
+                            if (Number.isFinite(timestamp)) {
+                                updatePreview(report, timestamp);
+                            }
+                        });
                     });
+
+                    stateConfigs.forEach((config) => {
+                        createStateCard(stateHost, config, focusChartsAtSegment);
+                    });
+
+                    const previewTimestamp = report.samples && report.samples.length > 0
+                        ? report.samples[report.samples.length - 1].timestamp
+                        : Date.now();
+                    updatePreview(report, previewTimestamp);
                 });
         </script>
     </body>

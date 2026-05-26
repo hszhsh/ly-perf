@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
     ExportResult,
     SessionDetail,
@@ -11,6 +11,7 @@ export type BusyAction = "delete" | "export-html" | "export-xlsx" | "rename";
 export type EventBusyAction = "create" | "update" | "delete";
 
 export interface FeedbackState {
+    id: number;
     type: "error" | "success";
     text: string;
 }
@@ -32,6 +33,7 @@ interface UseReportsRuntimeResult {
     busyAction: BusyAction | null;
     eventBusyAction: EventBusyAction | null;
     eventErrorMessage: string | null;
+    clearFeedback: () => void;
     clearEventError: () => void;
     refreshing: boolean;
     renameDialogOpen: boolean;
@@ -71,6 +73,16 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         null
     );
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const feedbackIdRef = useRef(0);
+
+    function showFeedback(type: FeedbackState["type"], text: string): void {
+        feedbackIdRef.current += 1;
+        setFeedback({
+            id: feedbackIdRef.current,
+            type,
+            text
+        });
+    }
 
     async function reloadSessions(): Promise<void> {
         setRefreshing(true);
@@ -87,10 +99,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
                 return list[0]?.id ?? "";
             });
         } catch (error) {
-            setFeedback({
-                type: "error",
-                text: getErrorMessage(error, "加载历史会话失败。")
-            });
+            showFeedback("error", getErrorMessage(error, "加载历史会话失败。"));
         } finally {
             setRefreshing(false);
         }
@@ -128,10 +137,10 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
 
                 setSessionDetail(null);
                 setExportResult(null);
-                setFeedback({
-                    type: "error",
-                    text: getErrorMessage(error, "加载历史会话详情失败。")
-                });
+                showFeedback(
+                    "error",
+                    getErrorMessage(error, "加载历史会话详情失败。")
+                );
             }
         })();
 
@@ -155,10 +164,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
             setExportResult(result);
             setFeedback(null);
         } catch (error) {
-            setFeedback({
-                type: "error",
-                text: getErrorMessage(error, "导出历史会话失败。")
-            });
+            showFeedback("error", getErrorMessage(error, "导出历史会话失败。"));
         } finally {
             setBusyAction(null);
         }
@@ -219,10 +225,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
             );
             setRenameDialogError(null);
             setRenameDialogOpen(false);
-            setFeedback({
-                type: "success",
-                text: `已将历史会话重命名为 ${renamed.displayName}。`
-            });
+            showFeedback("success", `已将历史会话重命名为 ${renamed.displayName}。`);
         } catch (error) {
             setRenameDialogError(
                 getErrorMessage(error, "重命名历史会话失败。")
@@ -260,20 +263,18 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
             setDeleteDialogOpen(false);
             setSessionDetail(null);
             setExportResult(null);
-            setFeedback({
-                type: "success",
-                text: `已删除历史会话 ${sessionDetail.displayName}。`
-            });
+            showFeedback("success", `已删除历史会话 ${sessionDetail.displayName}。`);
             setEventErrorMessage(null);
             await reloadSessions();
         } catch (error) {
-            setFeedback({
-                type: "error",
-                text: getErrorMessage(error, "删除历史会话失败。")
-            });
+            showFeedback("error", getErrorMessage(error, "删除历史会话失败。"));
         } finally {
             setBusyAction(null);
         }
+    }
+
+    function clearFeedback(): void {
+        setFeedback(null);
     }
 
     function clearEventError(): void {
@@ -335,6 +336,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         busyAction,
         eventBusyAction,
         eventErrorMessage,
+        clearFeedback,
         clearEventError,
         refreshing,
         renameDialogOpen,

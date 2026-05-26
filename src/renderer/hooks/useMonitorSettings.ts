@@ -6,6 +6,7 @@ export interface PersistedMonitorSettings {
     selectedPackage: string;
     fpsMode: FpsMode;
     cpuMode: CpuUsageMode;
+    deepMonitorEnabled: boolean;
     sampleIntervalMs: number;
     screenshotEnabled: boolean;
     screenshotIntervalMs: number;
@@ -20,6 +21,8 @@ export interface MonitorSettingsState {
     setFpsMode: React.Dispatch<React.SetStateAction<FpsMode>>;
     cpuMode: CpuUsageMode;
     setCpuMode: React.Dispatch<React.SetStateAction<CpuUsageMode>>;
+    deepMonitorEnabled: boolean;
+    setDeepMonitorEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     sampleIntervalMs: number;
     setSampleIntervalMs: React.Dispatch<React.SetStateAction<number>>;
     screenshotEnabled: boolean;
@@ -43,6 +46,7 @@ function parsePersistedMonitorSettings(
             selectedPackage: "",
             fpsMode: DEFAULT_FPS_MODE,
             cpuMode: DEFAULT_CPU_MODE,
+            deepMonitorEnabled: false,
             sampleIntervalMs: DEFAULT_SAMPLE_INTERVAL_MS,
             screenshotEnabled: false,
             screenshotIntervalMs: DEFAULT_SCREENSHOT_INTERVAL_MS
@@ -67,6 +71,7 @@ function parsePersistedMonitorSettings(
                 parsed.cpuMode === "normalized"
                     ? "normalized"
                     : DEFAULT_CPU_MODE,
+            deepMonitorEnabled: Boolean(parsed.deepMonitorEnabled),
             sampleIntervalMs:
                 typeof parsed.sampleIntervalMs === "number" &&
                 Number.isFinite(parsed.sampleIntervalMs)
@@ -85,6 +90,7 @@ function parsePersistedMonitorSettings(
             selectedPackage: "",
             fpsMode: DEFAULT_FPS_MODE,
             cpuMode: DEFAULT_CPU_MODE,
+            deepMonitorEnabled: false,
             sampleIntervalMs: DEFAULT_SAMPLE_INTERVAL_MS,
             screenshotEnabled: false,
             screenshotIntervalMs: DEFAULT_SCREENSHOT_INTERVAL_MS
@@ -114,6 +120,9 @@ export function useMonitorSettings(): MonitorSettingsState {
     const [cpuMode, setCpuMode] = useState<CpuUsageMode>(
         persistedSettings.cpuMode
     );
+    const [deepMonitorEnabled, setDeepMonitorEnabled] = useState(
+        persistedSettings.deepMonitorEnabled
+    );
     const [sampleIntervalMs, setSampleIntervalMs] = useState(
         persistedSettings.sampleIntervalMs
     );
@@ -132,6 +141,7 @@ export function useMonitorSettings(): MonitorSettingsState {
                 selectedPackage,
                 fpsMode,
                 cpuMode,
+                deepMonitorEnabled,
                 sampleIntervalMs,
                 screenshotEnabled,
                 screenshotIntervalMs
@@ -139,6 +149,7 @@ export function useMonitorSettings(): MonitorSettingsState {
         );
     }, [
         cpuMode,
+        deepMonitorEnabled,
         fpsMode,
         sampleIntervalMs,
         screenshotEnabled,
@@ -156,6 +167,8 @@ export function useMonitorSettings(): MonitorSettingsState {
         setFpsMode,
         cpuMode,
         setCpuMode,
+        deepMonitorEnabled,
+        setDeepMonitorEnabled,
         sampleIntervalMs,
         setSampleIntervalMs,
         screenshotEnabled,

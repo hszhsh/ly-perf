@@ -41,6 +41,14 @@
   min-width: 98px;
 }
 
+.tabTooltipTrigger {
+  display: inline-flex;
+}
+
+.tabTooltipTrigger > button {
+  pointer-events: none;
+}
+
 .tab:disabled,
 .tabActive:disabled {
   cursor: not-allowed;

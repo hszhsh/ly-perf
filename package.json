@@ -12,6 +12,7 @@
     "build": "npm run clean && npm run build:renderer && npm run build:main",
     "build:renderer": "cross-env NODE_ENV=production rspack build --config rspack.renderer.config.ts",
     "build:main": "cross-env NODE_ENV=production rspack build --config rspack.main.config.ts",
+    "deep-monitor:mock": "node ./scripts/deep-monitor-mock-client.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\" \".github/**/*.md\" \".prettierrc.json\" \"rspack.*.ts\" \"eslint.config.mjs\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\" \".github/**/*.md\" \".prettierrc.json\" \"rspack.*.ts\" \"eslint.config.mjs\"",

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
+    DeepMonitorChartDefinition,
+    DeepMonitorMetricDefinition,
+    DeepMonitorSample,
     DeviceInfo,
     FpsDebugInfo,
     InstalledApp,
@@ -25,6 +28,9 @@ interface UseMonitorRuntimeResult {
     loadingApps: boolean;
     monitorState: MonitorState;
     samples: MonitorSample[];
+    customMetricDefinitions: DeepMonitorMetricDefinition[];
+    customChartDefinitions: DeepMonitorChartDefinition[];
+    customSamples: DeepMonitorSample[];
     fpsDebug: FpsDebugInfo | null;
     capabilityReport: MetricCapabilityReport | null;
     latestScreenshot?: string;
@@ -57,6 +63,13 @@ export function useMonitorRuntime(
         running: false
     });
     const [samples, setSamples] = useState<MonitorSample[]>([]);
+    const [customMetricDefinitions, setCustomMetricDefinitions] = useState<
+        DeepMonitorMetricDefinition[]
+    >([]);
+    const [customChartDefinitions, setCustomChartDefinitions] = useState<
+        DeepMonitorChartDefinition[]
+    >([]);
+    const [customSamples, setCustomSamples] = useState<DeepMonitorSample[]>([]);
     const [fpsDebug, setFpsDebug] = useState<FpsDebugInfo | null>(null);
     const [capabilityReport, setCapabilityReport] =
         useState<MetricCapabilityReport | null>(null);
@@ -154,6 +167,27 @@ export function useMonitorRuntime(
 
     useEffect(() => {
         let cancelled = false;
+        const disposeState = window.lyPerf.onMonitorStateChange((state) => {
+            setMonitorState(state);
+        });
+        const disposeCustomSchema = window.lyPerf.onMonitorCustomSchema(
+            (schema) => {
+                setCustomMetricDefinitions(schema.metrics);
+                setCustomChartDefinitions(schema.charts);
+            }
+        );
+        const disposeCustomSamples = window.lyPerf.onMonitorCustomSamples(
+            (nextSamples) => {
+                setCustomSamples((prev) => {
+                    const merged = [...prev, ...nextSamples];
+                    if (merged.length > 7200) {
+                        return merged.slice(merged.length - 7200);
+                    }
+
+                    return merged;
+                });
+            }
+        );
         const dispose = window.lyPerf.onMonitorSample((sample) => {
             setSamples((prev) => {
                 const next = [...prev, sample];
@@ -197,6 +231,9 @@ export function useMonitorRuntime(
             if (state.config?.cpuMode) {
                 settings.setCpuMode(state.config.cpuMode);
             }
+            settings.setDeepMonitorEnabled(
+                Boolean(state.config?.deepMonitor?.enabled)
+            );
             if (typeof state.config?.sampleIntervalMs === "number") {
                 settings.setSampleIntervalMs(state.config.sampleIntervalMs);
             }
@@ -218,14 +255,27 @@ export function useMonitorRuntime(
                     const detail = await window.lyPerf.getSession(state.sessionId);
                     if (!cancelled) {
                         setSessionEvents(detail.events);
+                        setCustomMetricDefinitions(
+                            detail.customMetricDefinitions ?? []
+                        );
+                        setCustomChartDefinitions(
+                            detail.customChartDefinitions ?? []
+                        );
+                        setCustomSamples(detail.customSamples ?? []);
                     }
                 } catch {
                     if (!cancelled) {
                         setSessionEvents([]);
+                        setCustomMetricDefinitions([]);
+                        setCustomChartDefinitions([]);
+                        setCustomSamples([]);
                     }
                 }
             } else {
                 setSessionEvents([]);
+                setCustomMetricDefinitions([]);
+                setCustomChartDefinitions([]);
+                setCustomSamples([]);
             }
 
             await refreshDevices();
@@ -233,6 +283,9 @@ export function useMonitorRuntime(
 
         return () => {
             cancelled = true;
+            disposeState();
+            disposeCustomSchema();
+            disposeCustomSamples();
             dispose();
         };
     }, []);
@@ -279,6 +332,9 @@ export function useMonitorRuntime(
         setErrorMessage("");
         setIsStarting(true);
         setSamples([]);
+        setCustomMetricDefinitions([]);
+        setCustomChartDefinitions([]);
+        setCustomSamples([]);
         setSessionEvents([]);
         setFpsDebug(null);
         setCapabilityReport(null);
@@ -289,6 +345,13 @@ export function useMonitorRuntime(
             packageName: settings.selectedPackage,
             fpsMode: settings.fpsMode,
             cpuMode: settings.cpuMode,
+            deepMonitor: settings.deepMonitorEnabled
+                ? {
+                      enabled: true,
+                      transport: "tcp",
+                      socketKind: "raw-tcp"
+                  }
+                : undefined,
             sampleIntervalMs: settings.sampleIntervalMs,
             screenshotEnabled: settings.screenshotEnabled,
             screenshotIntervalMs: settings.screenshotIntervalMs
@@ -375,6 +438,9 @@ export function useMonitorRuntime(
         loadingApps,
         monitorState,
         samples,
+        customMetricDefinitions,
+        customChartDefinitions,
+        customSamples,
         fpsDebug,
         capabilityReport,
         latestScreenshot,

@@ -13,7 +13,8 @@ import type {
     SessionSummary
 } from "@shared/types";
 
-interface SessionJournalMetadata extends Omit<SessionDetail, "samples"> {
+interface SessionJournalMetadata
+    extends Omit<SessionDetail, "samples" | "customSamples"> {
     sampleCount: number;
 }
 
@@ -87,6 +88,11 @@ export class SessionStore {
             "",
             "utf8"
         );
+        await fs.writeFile(
+            this.getSessionJournalCustomSamplesPath(normalized.id),
+            "",
+            "utf8"
+        );
     }
 
     async appendSessionSample(
@@ -99,6 +105,26 @@ export class SessionStore {
             recursive: true
         });
         await fs.appendFile(journalPath, `${JSON.stringify(sample)}\n`, "utf8");
+    }
+
+    async appendCustomSamples(
+        sessionId: string,
+        samples: NonNullable<SessionDetail["customSamples"]>
+    ): Promise<void> {
+        if (samples.length === 0) {
+            return;
+        }
+
+        const journalPath = this.getSessionJournalCustomSamplesPath(sessionId);
+
+        await fs.mkdir(this.getSessionJournalDir(sessionId), {
+            recursive: true
+        });
+        await fs.appendFile(
+            journalPath,
+            samples.map((sample) => JSON.stringify(sample)).join("\n") + "\n",
+            "utf8"
+        );
     }
 
     async updateSessionJournalMetadata(session: SessionDetail): Promise<void> {
@@ -359,7 +385,19 @@ export class SessionStore {
                 session.persistenceState
             ),
             sampleCount: session.samples.length,
-            events: this.normalizeEvents(session.events)
+            events: this.normalizeEvents(session.events),
+            customMetricDefinitions: Array.isArray(session.customMetricDefinitions)
+                ? session.customMetricDefinitions
+                : [],
+            customChartDefinitions: Array.isArray(session.customChartDefinitions)
+                ? session.customChartDefinitions
+                : [],
+            customSchemaHistory: Array.isArray(session.customSchemaHistory)
+                ? session.customSchemaHistory
+                : [],
+            customSamples: Array.isArray(session.customSamples)
+                ? session.customSamples
+                : []
         };
     }
 
@@ -483,7 +521,11 @@ export class SessionStore {
             persistenceState: session.persistenceState,
             config: session.config,
             deviceInfo: session.deviceInfo,
-            events: session.events
+            events: session.events,
+            deepMonitor: session.deepMonitor,
+            customMetricDefinitions: session.customMetricDefinitions,
+            customChartDefinitions: session.customChartDefinitions,
+            customSchemaHistory: session.customSchemaHistory
         };
     }
 
@@ -492,9 +534,17 @@ export class SessionStore {
     ): Promise<SessionDetail> {
         const metadataPath = this.getSessionJournalMetaPath(sessionId);
         const samplesPath = this.getSessionJournalSamplesPath(sessionId);
-        const [metadataRaw, samplesRaw] = await Promise.all([
+        const customSamplesPath = this.getSessionJournalCustomSamplesPath(sessionId);
+        const [metadataRaw, samplesRaw, customSamplesRaw] = await Promise.all([
             fs.readFile(metadataPath, "utf8"),
-            fs.readFile(samplesPath, "utf8")
+            fs.readFile(samplesPath, "utf8"),
+            fs.readFile(customSamplesPath, "utf8").catch((error) => {
+                if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+                    return "";
+                }
+
+                throw error;
+            })
         ]);
 
         const metadata = JSON.parse(metadataRaw) as SessionJournalMetadata;
@@ -503,6 +553,14 @@ export class SessionStore {
             .map((line) => line.trim())
             .filter(Boolean)
             .map((line) => JSON.parse(line) as MonitorSample);
+        const customSamples = customSamplesRaw
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map(
+                (line) =>
+                    JSON.parse(line) as NonNullable<SessionDetail["customSamples"]>[number]
+            );
 
         return this.normalizeSession({
             id: metadata.id,
@@ -516,7 +574,12 @@ export class SessionStore {
             config: metadata.config,
             deviceInfo: metadata.deviceInfo,
             samples,
-            events: metadata.events
+            events: metadata.events,
+            deepMonitor: metadata.deepMonitor,
+            customMetricDefinitions: metadata.customMetricDefinitions,
+            customChartDefinitions: metadata.customChartDefinitions,
+            customSchemaHistory: metadata.customSchemaHistory,
+            customSamples
         });
     }
 
@@ -543,6 +606,13 @@ export class SessionStore {
         return path.join(
             this.getSessionJournalDir(sessionId),
             "samples.ndjson"
+        );
+    }
+
+    private getSessionJournalCustomSamplesPath(sessionId: string): string {
+        return path.join(
+            this.getSessionJournalDir(sessionId),
+            "custom-samples.ndjson"
         );
     }
 

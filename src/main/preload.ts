@@ -1,10 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
+    DeepMonitorSample,
+    DeepMonitorSchemaRevision,
     ExportResult,
     LyPerfApi,
     MonitorConfig,
     MonitorSample,
+    MonitorState,
     SessionDetail,
     SessionTimelineEventInput,
     SessionTimelineEventUpdate,
@@ -26,6 +29,56 @@ const api: LyPerfApi = {
     getMonitorState: () => ipcRenderer.invoke(IPC_CHANNELS.getMonitorState),
     getMonitorCapabilityReport: () =>
         ipcRenderer.invoke(IPC_CHANNELS.getMonitorCapabilityReport),
+    onMonitorStateChange: (handler: (state: MonitorState) => void) => {
+        const wrapped = (
+            _event: Electron.IpcRendererEvent,
+            state: MonitorState
+        ) => {
+            handler(state);
+        };
+
+        ipcRenderer.on(IPC_CHANNELS.monitorState, wrapped);
+
+        return () => {
+            ipcRenderer.removeListener(IPC_CHANNELS.monitorState, wrapped);
+        };
+    },
+    onMonitorCustomSchema: (
+        handler: (schema: DeepMonitorSchemaRevision) => void
+    ) => {
+        const wrapped = (
+            _event: Electron.IpcRendererEvent,
+            schema: DeepMonitorSchemaRevision
+        ) => {
+            handler(schema);
+        };
+
+        ipcRenderer.on(IPC_CHANNELS.monitorCustomSchema, wrapped);
+
+        return () => {
+            ipcRenderer.removeListener(
+                IPC_CHANNELS.monitorCustomSchema,
+                wrapped
+            );
+        };
+    },
+    onMonitorCustomSamples: (handler: (samples: DeepMonitorSample[]) => void) => {
+        const wrapped = (
+            _event: Electron.IpcRendererEvent,
+            samples: DeepMonitorSample[]
+        ) => {
+            handler(samples);
+        };
+
+        ipcRenderer.on(IPC_CHANNELS.monitorCustomSamples, wrapped);
+
+        return () => {
+            ipcRenderer.removeListener(
+                IPC_CHANNELS.monitorCustomSamples,
+                wrapped
+            );
+        };
+    },
     onMonitorSample: (handler: (sample: MonitorSample) => void) => {
         const wrapped = (
             _event: Electron.IpcRendererEvent,

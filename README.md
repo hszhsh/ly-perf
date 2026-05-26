@@ -62,6 +62,27 @@ npm run dist       # 打包 Windows 安装产物
 4. 根据需要设置 FPS 模式、CPU 模式、采样间隔和截图选项。
 5. 启动监控后查看实时图表和最新截图。
 
+### 深度监测（TCP Socket）
+
+1. 在实时监控侧栏勾选“启用深度监测（TCP Socket）”。
+2. 启动监控后，桌面端会暴露固定 discovery 端点 `http://127.0.0.1:27183/deep-monitor/discovery`。
+3. 设备端应用先请求 discovery 端点，拿到当前 `stream.port` 和 `stream.sessionToken`。
+4. 然后再连接设备本地 `127.0.0.1:<stream.port>`，依次发送 `hello`、`schemaDeclare` 和 `sampleBatch`。
+5. `schemaDeclare` 里可定义自定义指标、图表布局，以及该图是否需要统计最大值、最小值、平均值等信息。
+6. 自定义样本会实时进入 Monitor 页面图表，停止监控后也会进入 Reports 页面、HTML 导出和 XLSX 导出。
+
+协议细节见 `docs/deep-monitor-protocol.md`。
+
+Unity Android 接入模板见 `docs/unity-deep-monitor-template.md`。
+
+本地联调可直接运行：
+
+```bash
+npm run deep-monitor:mock
+```
+
+这个 mock client 会先请求固定 discovery 端点，自动获取当前 `stream.port` 和 `stream.sessionToken`，然后按当前协议完成握手、声明一组演示 schema，并持续推送自定义样本。若要跳过 discovery 做特殊调试，仍可显式传 `--port` 和 `--token`。
+
 ### 历史报告
 
 1. 停止实时监控后切换到历史报告页。

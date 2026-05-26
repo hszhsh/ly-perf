@@ -1,0 +1,174 @@
+.panel {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(116, 145, 171, 0.22);
+    background: rgba(15, 25, 38, 0.56);
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.headerTitle {
+    display: grid;
+    gap: 4px;
+}
+
+.headerTitle strong {
+    font-size: 13px;
+    color: #eff6ff;
+}
+
+.headerTitle span {
+    font-size: 11px;
+    color: #8ea1b7;
+}
+
+.rangeBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(146, 173, 198, 0.28);
+    background: rgba(21, 33, 47, 0.72);
+    font-size: 10px;
+    color: #dbe7f6;
+}
+
+.chartStack {
+    display: grid;
+    gap: 10px;
+}
+
+.chartCard {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(116, 145, 171, 0.18);
+    background: rgba(10, 17, 27, 0.72);
+}
+
+.chartHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.chartTitleBlock {
+    display: grid;
+    gap: 4px;
+}
+
+.chartTitleBlock strong {
+    font-size: 12px;
+    color: #eff6ff;
+}
+
+.chartTitleBlock span,
+.chartMeta,
+.trackMeta,
+.segmentMeta,
+.segmentCount,
+.segmentTime {
+    font-size: 11px;
+    color: #8ea1b7;
+}
+
+.trackStack,
+.segmentList {
+    display: grid;
+    gap: 8px;
+}
+
+.track {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(116, 145, 171, 0.16);
+    background: rgba(13, 21, 33, 0.72);
+}
+
+.trackHeader,
+.trackTitle,
+.segmentHeader {
+    display: flex;
+    gap: 8px;
+}
+
+.trackHeader,
+.segmentHeader {
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.trackTitle {
+    align-items: center;
+}
+
+.trackTitle strong {
+    font-size: 12px;
+    color: #d8e3f0;
+}
+
+.colorDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+
+.segment {
+    width: 100%;
+    text-align: left;
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(116, 145, 171, 0.18);
+    border-left: 4px solid var(--segment-accent, #7dd3fc);
+    background: rgba(8, 14, 23, 0.82);
+}
+
+.segment:hover {
+    border-color: rgba(130, 199, 255, 0.4);
+    background: rgba(10, 18, 28, 0.92);
+}
+
+.segmentActive {
+    border-color: rgba(130, 199, 255, 0.88);
+    box-shadow: 0 0 0 1px rgba(130, 199, 255, 0.28) inset;
+}
+
+.segmentValue {
+    font-size: 12px;
+    color: #eff6ff;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.emptyTrack {
+    margin: 0;
+    font-size: 12px;
+    color: #8fa2b8;
+}
+
+@media (max-width: 900px) {
+    .header,
+    .chartHeader,
+    .trackHeader,
+    .segmentHeader {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

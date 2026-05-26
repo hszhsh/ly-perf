@@ -1,4 +1,4 @@
-export type MetricName =
+export type BuiltinMetricName =
     | "fps"
     | "jank"
     | "bigJank"
@@ -16,6 +16,108 @@ export type MetricName =
     | "gpu"
     | "power"
     | "temperature";
+
+export type MetricName = BuiltinMetricName;
+
+export type DeepMonitorTransport = "tcp";
+export type DeepMonitorSocketKind = "raw-tcp";
+export type DeepMonitorDiscoveryTransport = "http";
+export type DeepMonitorConnectionPhase =
+    | "idle"
+    | "waiting-for-client"
+    | "connected"
+    | "negotiating"
+    | "ready"
+    | "streaming"
+    | "rejected"
+    | "closed"
+    | "error";
+export type DeepMonitorValueType = "number" | "string" | "string-list";
+export type DeepMonitorSampleValue = number | string | string[] | null;
+export type DeepMonitorAggregationHint =
+    | "last"
+    | "sum"
+    | "average"
+    | "max"
+    | "min";
+export type DeepMonitorStatComputation = "min" | "max" | "average";
+export type DeepMonitorStatScope = "visible-range" | "whole-session";
+export type DeepMonitorStatSurface =
+    | "reports-only"
+    | "monitor-and-reports"
+    | "monitor-only";
+
+export interface DeepMonitorMetricDefinition {
+    key: string;
+    label: string;
+    unit: string;
+    color?: string;
+    valueType: DeepMonitorValueType;
+    aggregationHint?: DeepMonitorAggregationHint;
+    description?: string;
+}
+
+export interface DeepMonitorChartStatsPolicy {
+    enabled: boolean;
+    computations: DeepMonitorStatComputation[];
+    scope: DeepMonitorStatScope;
+    surface: DeepMonitorStatSurface;
+    metricKeys?: string[];
+}
+
+export interface DeepMonitorChartDefinition {
+    id: string;
+    title: string;
+    metricKeys: string[];
+    order?: number;
+    description?: string;
+    yAxisLabel?: string;
+    yAxisUnit?: string;
+    stats: DeepMonitorChartStatsPolicy;
+}
+
+export interface DeepMonitorSchemaRevision {
+    revision: number;
+    metrics: DeepMonitorMetricDefinition[];
+    charts: DeepMonitorChartDefinition[];
+    declaredAt: number;
+    protocolVersion?: number;
+}
+
+export interface DeepMonitorSample {
+    timestamp: number;
+    receivedAt: number;
+    schemaRevision: number;
+    values: Record<string, DeepMonitorSampleValue>;
+    sequence?: number;
+}
+
+export interface DeepMonitorSessionState {
+    enabled: boolean;
+    transport: DeepMonitorTransport;
+    socketKind: DeepMonitorSocketKind;
+    phase: DeepMonitorConnectionPhase;
+    discovery?: {
+        transport: DeepMonitorDiscoveryTransport;
+        host: string;
+        port: number;
+        path: string;
+    };
+    port?: number;
+    authToken?: string;
+    protocolVersion?: number;
+    activeSchemaRevision?: number;
+    lastError?: string;
+    connectedAt?: number;
+    negotiatedAt?: number;
+}
+
+export interface DeepMonitorConfig {
+    enabled: boolean;
+    transport: DeepMonitorTransport;
+    socketKind: DeepMonitorSocketKind;
+    preferredPort?: number;
+}
 
 export type FpsMode = "surfaceflinger" | "gfxinfo";
 export type CpuUsageMode = "traditional" | "normalized";
@@ -152,6 +254,7 @@ export interface MonitorConfig {
     sampleIntervalMs: number;
     screenshotEnabled: boolean;
     screenshotIntervalMs: number;
+    deepMonitor?: DeepMonitorConfig;
 }
 
 export interface MonitorState {
@@ -159,6 +262,7 @@ export interface MonitorState {
     sessionId?: string;
     config?: MonitorConfig;
     startedAt?: number;
+    deepMonitor?: DeepMonitorSessionState;
 }
 
 export type SessionPersistenceState = "finalized" | "recovered";
@@ -179,6 +283,11 @@ export interface SessionDetail extends SessionSummary {
     deviceInfo: DeviceInfo;
     samples: MonitorSample[];
     events: SessionTimelineEvent[];
+    deepMonitor?: DeepMonitorSessionState;
+    customMetricDefinitions?: DeepMonitorMetricDefinition[];
+    customChartDefinitions?: DeepMonitorChartDefinition[];
+    customSchemaHistory?: DeepMonitorSchemaRevision[];
+    customSamples?: DeepMonitorSample[];
 }
 
 export interface ExportResult {
@@ -205,6 +314,13 @@ export interface LyPerfApi {
     stopMonitor: () => Promise<MonitorState>;
     getMonitorState: () => Promise<MonitorState>;
     getMonitorCapabilityReport: () => Promise<MetricCapabilityReport | null>;
+    onMonitorStateChange: (handler: (state: MonitorState) => void) => () => void;
+    onMonitorCustomSchema: (
+        handler: (schema: DeepMonitorSchemaRevision) => void
+    ) => () => void;
+    onMonitorCustomSamples: (
+        handler: (samples: DeepMonitorSample[]) => void
+    ) => () => void;
     onMonitorSample: (handler: (sample: MonitorSample) => void) => () => void;
     listSessions: () => Promise<SessionSummary[]>;
     getSession: (sessionId: string) => Promise<SessionDetail>;

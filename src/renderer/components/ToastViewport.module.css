@@ -1,0 +1,70 @@
+.viewport {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(121, 151, 181, 0.28);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(25, 39, 56, 0.98), rgba(9, 16, 24, 0.96)),
+    rgba(12, 18, 28, 0.96);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  pointer-events: auto;
+}
+
+.toast[data-tone="success"] {
+  border-color: rgba(77, 208, 225, 0.35);
+}
+
+.toast[data-tone="error"] {
+  border-color: rgba(253, 164, 175, 0.38);
+}
+
+.toast[data-tone="info"] {
+  border-color: rgba(121, 151, 181, 0.36);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.title {
+  color: var(--text-0);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.description {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.dismissButton {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 640px) {
+  .viewport {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}

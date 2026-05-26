@@ -3,6 +3,7 @@ import path from "node:path";
 import { IPC_CHANNELS } from "@shared/ipc";
 import { AdbClient } from "@main/adb/AdbClient";
 import { registerIpcHandlers } from "@main/ipc/registerIpc";
+import { DeepMonitorTcpService } from "@main/services/DeepMonitorTcpService";
 import { DeviceService } from "@main/services/DeviceService";
 import { MetricCollector } from "@main/services/MetricCollector";
 import { MonitorService } from "@main/services/MonitorService";
@@ -60,6 +61,7 @@ async function bootstrap(): Promise<void> {
 
     const adbClient = new AdbClient(adbPath);
     const deviceService = new DeviceService(adbClient);
+    const deepMonitor = new DeepMonitorTcpService(adbClient);
     const collector = new MetricCollector(adbClient);
     const sessionStore = new SessionStore(dataDir);
     await sessionStore.init();
@@ -68,8 +70,30 @@ async function bootstrap(): Promise<void> {
     monitorService = new MonitorService(
         adbClient,
         deviceService,
+        deepMonitor,
         collector,
         sessionStore,
+        (state) => {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                return;
+            }
+
+            mainWindow.webContents.send(IPC_CHANNELS.monitorState, state);
+        },
+        (schema) => {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                return;
+            }
+
+            mainWindow.webContents.send(IPC_CHANNELS.monitorCustomSchema, schema);
+        },
+        (samples) => {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                return;
+            }
+
+            mainWindow.webContents.send(IPC_CHANNELS.monitorCustomSamples, samples);
+        },
         (_sessionId, sample) => {
             if (!mainWindow || mainWindow.isDestroyed()) {
                 return;

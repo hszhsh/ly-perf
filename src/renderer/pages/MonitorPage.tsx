@@ -11,7 +11,6 @@ interface MonitorPageProps {
 }
 
 export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
-    const chartSyncGroup = "monitor-metric-charts";
     const {
         selectedSerial,
         setSelectedSerial,
@@ -21,6 +20,8 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         setFpsMode,
         cpuMode,
         setCpuMode,
+        deepMonitorEnabled,
+        setDeepMonitorEnabled,
         sampleIntervalMs,
         setSampleIntervalMs,
         screenshotEnabled,
@@ -36,6 +37,9 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         loadingApps,
         monitorState,
         samples,
+        customMetricDefinitions,
+        customChartDefinitions,
+        customSamples,
         fpsDebug,
         capabilityReport,
         latestScreenshot,
@@ -63,6 +67,8 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         setFpsMode,
         cpuMode,
         setCpuMode,
+        deepMonitorEnabled,
+        setDeepMonitorEnabled,
         sampleIntervalMs,
         setSampleIntervalMs,
         screenshotEnabled,
@@ -108,6 +114,8 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
                 onFpsModeChange={setFpsMode}
                 cpuMode={cpuMode}
                 onCpuModeChange={setCpuMode}
+                deepMonitorEnabled={deepMonitorEnabled}
+                onDeepMonitorEnabledChange={setDeepMonitorEnabled}
                 sampleIntervalMs={sampleIntervalMs}
                 onSampleIntervalChange={setSampleIntervalMs}
                 screenshotEnabled={screenshotEnabled}
@@ -121,16 +129,19 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
                 onStop={() => void handleStop()}
                 fpsDebug={fpsDebug}
                 capabilityReport={capabilityReport}
+                deepMonitorState={monitorState.deepMonitor}
             />
 
             <div className={styles.content}>
                 <MonitorChartsPanel
                     samples={samples}
                     activeCpuMode={activeCpuMode}
+                    customMetricDefinitions={customMetricDefinitions}
+                    customChartDefinitions={customChartDefinitions}
+                    customSamples={customSamples}
                     latestNetworkRx={latestMetrics?.networkRx}
                     latestNetworkTx={latestMetrics?.networkTx}
                     latestNetworkTotal={latestMetrics?.networkTotal}
-                    syncGroup={chartSyncGroup}
                     events={sessionEvents}
                     editableEvents={monitorState.running}
                     eventBusyAction={eventBusyAction}

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { Tooltip } from "@renderer/components/Tooltip";
 import { MonitorPage } from "@renderer/pages/MonitorPage";
 import styles from "./styles/App.module.css";
 
@@ -47,6 +48,21 @@ export function App() {
     }, [isMonitorBusy]);
 
     const reportsDisabled = !isMonitorStateReady || isMonitorBusy;
+    const reportsDisabledReason = reportsDisabled
+        ? "实时监控启动中或进行中时，不能切换到历史报告。"
+        : null;
+    const reportsTabButton = (
+        <button
+            className={
+                activeTab === "reports" ? styles.tabActive : styles.tab
+            }
+            disabled={reportsDisabled}
+            onClick={() => setActiveTab("reports")}
+            type="button"
+        >
+            历史报告
+        </button>
+    );
 
     return (
         <div className={styles.shell}>
@@ -69,23 +85,15 @@ export function App() {
                     >
                         实时监控
                     </button>
-                    <button
-                        className={
-                            activeTab === "reports"
-                                ? styles.tabActive
-                                : styles.tab
-                        }
-                        disabled={reportsDisabled}
-                        onClick={() => setActiveTab("reports")}
-                        title={
-                            reportsDisabled
-                                ? "实时监控启动中或进行中时，不能切换到历史报告。"
-                                : undefined
-                        }
-                        type="button"
-                    >
-                        历史报告
-                    </button>
+                    {reportsDisabledReason ? (
+                        <Tooltip content={reportsDisabledReason} placement="bottom">
+                            <span className={styles.tabTooltipTrigger}>
+                                {reportsTabButton}
+                            </span>
+                        </Tooltip>
+                    ) : (
+                        reportsTabButton
+                    )}
                 </nav>
             </header>
 

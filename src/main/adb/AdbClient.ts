@@ -314,4 +314,33 @@ export class AdbClient {
 
         await fs.writeFile(outputPath, result.stdout);
     }
+
+    async reverseTcp(
+        serial: string,
+        devicePort: number,
+        localPort: number
+    ): Promise<void> {
+        await this.execute(
+            [
+                "reverse",
+                `tcp:${Math.floor(devicePort)}`,
+                `tcp:${Math.floor(localPort)}`
+            ],
+            {
+                serial,
+                timeoutMs: 20000
+            }
+        );
+    }
+
+    async removeReverseTcp(serial: string, devicePort: number): Promise<void> {
+        await this.execute(
+            ["reverse", "--remove", `tcp:${Math.floor(devicePort)}`],
+            {
+                serial,
+                timeoutMs: 20000,
+                allowFailure: true
+            }
+        );
+    }
 }

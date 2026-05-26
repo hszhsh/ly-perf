@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
-import { createPortal } from "react-dom";
+import { LayerPortal } from "@renderer/components/LayerPortal";
 import styles from "./ModalDialog.module.css";
 
 interface ModalDialogProps {
@@ -67,61 +67,64 @@ export function ModalDialog(props: ModalDialogProps) {
         };
     }, [open]);
 
-    if (!open || typeof document === "undefined") {
+    if (!open) {
         return null;
     }
 
-    return createPortal(
-        <div
-            className={styles.backdrop}
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget) {
-                    onClose?.();
-                }
-            }}
-        >
+    return (
+        <LayerPortal layer="modal">
             <div
-                ref={dialogRef}
-                className={styles.dialog}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                aria-describedby={description ? descriptionId : undefined}
-                tabIndex={-1}
+                className={styles.backdrop}
+                onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                        onClose?.();
+                    }
+                }}
             >
-                <div className={styles.header}>
-                    <div>
-                        <h3 id={titleId} className={styles.title}>
-                            {title}
-                        </h3>
-                        {description ? (
-                            <p
-                                id={descriptionId}
-                                className={styles.description}
+                <div
+                    ref={dialogRef}
+                    className={styles.dialog}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={titleId}
+                    aria-describedby={description ? descriptionId : undefined}
+                    tabIndex={-1}
+                >
+                    <div className={styles.header}>
+                        <div>
+                            <h3 id={titleId} className={styles.title}>
+                                {title}
+                            </h3>
+                            {description ? (
+                                <p
+                                    id={descriptionId}
+                                    className={styles.description}
+                                >
+                                    {description}
+                                </p>
+                            ) : null}
+                        </div>
+
+                        {onClose ? (
+                            <button
+                                type="button"
+                                className={styles.closeButton}
+                                onClick={onClose}
+                                aria-label={closeLabel}
                             >
-                                {description}
-                            </p>
+                                ×
+                            </button>
                         ) : null}
                     </div>
 
-                    {onClose ? (
-                        <button
-                            type="button"
-                            className={styles.closeButton}
-                            onClick={onClose}
-                            aria-label={closeLabel}
-                        >
-                            ×
-                        </button>
+                    {children ? (
+                        <div className={styles.body}>{children}</div>
+                    ) : null}
+                    {footer ? (
+                        <div className={styles.footer}>{footer}</div>
                     ) : null}
                 </div>
-
-                {children ? (
-                    <div className={styles.body}>{children}</div>
-                ) : null}
-                {footer ? <div className={styles.footer}>{footer}</div> : null}
             </div>
-        </div>,
-        document.body
+        </LayerPortal>
     );
 }

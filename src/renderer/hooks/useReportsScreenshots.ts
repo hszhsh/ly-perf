@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SessionDetail } from "@shared/types";
 
 function findNearestIndex(indexes: number[], target: number): number {
@@ -45,7 +45,50 @@ interface UseReportsScreenshotsResult {
     selectedScreenshotUrl: string;
     isScreenshotLoading: boolean;
     handleChartSampleFocus: (sampleIndex: number) => void;
+    handleChartTimestampFocus: (timestamp: number) => void;
     jumpScreenshot: (offset: -1 | 1) => void;
+}
+
+function findNearestSampleIndexByTimestamp(
+    samples: SessionDetail["samples"],
+    timestamp: number
+): number {
+    if (samples.length === 0) {
+        return -1;
+    }
+
+    let low = 0;
+    let high = samples.length - 1;
+
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const middleTimestamp = samples[middle]?.timestamp ?? 0;
+
+        if (middleTimestamp === timestamp) {
+            return middle;
+        }
+
+        if (middleTimestamp < timestamp) {
+            low = middle + 1;
+        } else {
+            high = middle - 1;
+        }
+    }
+
+    if (low >= samples.length) {
+        return samples.length - 1;
+    }
+
+    if (high < 0) {
+        return 0;
+    }
+
+    const nextDistance = Math.abs((samples[low]?.timestamp ?? 0) - timestamp);
+    const previousDistance = Math.abs(
+        (samples[high]?.timestamp ?? 0) - timestamp
+    );
+
+    return previousDistance <= nextDistance ? high : low;
 }
 
 export function useReportsScreenshots(
@@ -126,7 +169,7 @@ export function useReportsScreenshots(
         };
     }, [selectedScreenshotSample]);
 
-    function handleChartSampleFocus(sampleIndex: number): void {
+    const handleChartSampleFocus = useCallback((sampleIndex: number): void => {
         if (screenshotSampleIndexes.length === 0) {
             return;
         }
@@ -138,7 +181,24 @@ export function useReportsScreenshots(
         setSelectedScreenshotPosition((current) =>
             current === nextPosition ? current : nextPosition
         );
-    }
+    }, [screenshotSampleIndexes]);
+
+    const handleChartTimestampFocus = useCallback((timestamp: number): void => {
+        if (!sessionDetail || screenshotSampleIndexes.length === 0) {
+            return;
+        }
+
+        const sampleIndex = findNearestSampleIndexByTimestamp(
+            sessionDetail.samples,
+            timestamp
+        );
+
+        if (sampleIndex < 0) {
+            return;
+        }
+
+        handleChartSampleFocus(sampleIndex);
+    }, [handleChartSampleFocus, screenshotSampleIndexes.length, sessionDetail]);
 
     function jumpScreenshot(offset: -1 | 1): void {
         setSelectedScreenshotPosition((current) => {
@@ -166,6 +226,7 @@ export function useReportsScreenshots(
         selectedScreenshotUrl,
         isScreenshotLoading,
         handleChartSampleFocus,
+        handleChartTimestampFocus,
         jumpScreenshot
     };
 }
