@@ -36,6 +36,10 @@ export interface ChartRangeRequest {
     endTimestamp: number;
 }
 
+function hasPositiveTimeSpan(range: ChartTimeDomain): boolean {
+    return range.endTimestamp > range.startTimestamp;
+}
+
 interface MetricChartProps<TSample extends TimestampedSample = MonitorSample> {
     title: string;
     samples: TSample[];
@@ -138,7 +142,7 @@ function normalizeTooltipColor(color: unknown): string {
 }
 
 function renderTooltipSurface(content: string): string {
-    return `<div style="min-width:260px;max-width:340px;max-height:min(280px, calc(100vh - 24px));overflow-y:auto;overscroll-behavior:contain;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
+    return `<div style="min-width:260px;max-width:340px;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
 }
 
 function renderTooltipColorDot(color: string, size = 10): string {
@@ -1067,6 +1071,11 @@ export function MetricChart<TSample extends TimestampedSample>(
                         startTimestamp: Math.floor(timeRange.startTimestamp),
                         endTimestamp: Math.ceil(timeRange.endTimestamp)
                     } satisfies ChartTimeDomain;
+
+                    if (!hasPositiveTimeSpan(normalizedRange)) {
+                        return;
+                    }
+
                     const suppressedRange = suppressedTimeRangeRef.current;
 
                     if (
@@ -1293,6 +1302,10 @@ export function MetricChart<TSample extends TimestampedSample>(
             endTimestamp: Math.ceil(props.rangeRequest.endTimestamp)
         } satisfies ChartTimeDomain;
 
+        if (!hasPositiveTimeSpan(requestedRange)) {
+            return;
+        }
+
         if (
             Math.abs(currentRange.startTimestamp - requestedRange.startTimestamp) <=
                 1 &&
@@ -1379,7 +1392,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                 width: "100%",
                 minWidth: 0,
                 height: "280px",
-                overflow: "visible"
+                overflow: "hidden"
             }}
         >
             <div

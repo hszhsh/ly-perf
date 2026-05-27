@@ -177,9 +177,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
-                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
-                    onTimestampFocus={requestFocusTimestamp}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
@@ -192,9 +190,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
-                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
-                    onTimestampFocus={requestFocusTimestamp}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
@@ -207,9 +203,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
-                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
-                    onTimestampFocus={requestFocusTimestamp}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
@@ -222,9 +216,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
-                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
-                    onTimestampFocus={requestFocusTimestamp}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
@@ -237,9 +229,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
-                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
-                    onTimestampFocus={requestFocusTimestamp}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
@@ -264,9 +254,7 @@ export function MonitorChartsPanel({
                             samples={sortedCustomSamples}
                             timeDomain={sharedTimeDomain}
                             events={events}
-                            focusRequest={focusRequest}
                             rangeRequest={rangeRequest}
-                            onTimestampFocus={requestFocusTimestamp}
                             onVisibleTimeRangeChange={
                                 requestVisibleTimeRange
                             }
