@@ -430,6 +430,8 @@ function buildTimelineMarkerData(
     let lane = 0;
 
     return events.map((event) => {
+        const eventText = event.text.trim() || (event.type === "screenshot" ? "截图" : "");
+
         if (event.timestamp - previousTimestamp <= clusterThreshold) {
             lane = (lane + 1) % 4;
         } else {
@@ -445,10 +447,10 @@ function buildTimelineMarkerData(
             id: event.id,
             xAxis: event.timestamp,
             eventText:
-                event.text.length > 18
-                    ? `${event.text.slice(0, 18)}...`
-                    : event.text,
-            eventFullText: event.text,
+                eventText.length > 18
+                    ? `${eventText.slice(0, 18)}...`
+                    : eventText,
+            eventFullText: eventText,
             eventColor: event.color,
             eventTypeLabel: getTimelineEventTypeLabel(event.type),
             eventTimeLabel: formatTooltipTimestamp(event.timestamp),
@@ -551,7 +553,9 @@ function formatAxisTooltip(
                             eventTimeLabel: formatTooltipTimestamp(
                                 event.timestamp
                             ),
-                            eventFullText: event.text,
+                            eventFullText:
+                                event.text.trim() ||
+                                (event.type === "screenshot" ? "截图" : ""),
                             eventSampleLabel: getEventSampleLabel(
                                 samples,
                                 event.timestamp

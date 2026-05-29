@@ -28,6 +28,12 @@ export const TIMELINE_EVENT_TYPE_PRESETS: TimelineEventTypePreset[] = [
         label: "问题",
         description: "卡顿、异常、告警、崩溃等问题点。",
         defaultColor: "#fca5a5"
+    },
+    {
+        type: "screenshot",
+        label: "截图",
+        description: "实时监控时手动抓取的一张截图，可后续补充备注。",
+        defaultColor: "#fcd34d"
     }
 ];
 

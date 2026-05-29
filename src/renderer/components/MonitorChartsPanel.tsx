@@ -44,9 +44,10 @@ interface MonitorChartsPanelProps {
     latestNetworkTotal?: MetricDatum;
     events: SessionTimelineEvent[];
     editableEvents: boolean;
-    eventBusyAction: "create" | "update" | "delete" | null;
+    eventBusyAction: "capture" | "create" | "update" | "delete" | null;
     eventErrorMessage: string;
     onClearEventError: () => void;
+    onCaptureScreenshotEvent: () => Promise<boolean>;
     onCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
     onUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
     onDeleteEvent: (eventId: string) => Promise<boolean>;
@@ -86,6 +87,7 @@ export function MonitorChartsPanel({
     eventBusyAction,
     eventErrorMessage,
     onClearEventError,
+    onCaptureScreenshotEvent,
     onCreateEvent,
     onUpdateEvent,
     onDeleteEvent
@@ -115,16 +117,10 @@ export function MonitorChartsPanel({
     function requestFocusTimestamp(timestamp: number): void {
         const normalizedTimestamp = Math.floor(timestamp);
 
-        setFocusRequest((current) => {
-            if (current?.timestamp === normalizedTimestamp) {
-                return current;
-            }
-
-            return {
-                id: (current?.id ?? 0) + 1,
-                timestamp: normalizedTimestamp
-            };
-        });
+        setFocusRequest((current) => ({
+            id: (current?.id ?? 0) + 1,
+            timestamp: normalizedTimestamp
+        }));
     }
 
     function requestVisibleTimeRange(range: ChartTimeDomain): void {
@@ -177,6 +173,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
+                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
@@ -190,6 +187,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
+                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
@@ -203,6 +201,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
+                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
@@ -216,6 +215,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
+                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
@@ -229,6 +229,7 @@ export function MonitorChartsPanel({
                     samples={samples}
                     timeDomain={sharedTimeDomain}
                     events={events}
+                    focusRequest={focusRequest}
                     rangeRequest={rangeRequest}
                     onVisibleTimeRangeChange={requestVisibleTimeRange}
                     onAddEventAtTimestamp={
@@ -254,6 +255,7 @@ export function MonitorChartsPanel({
                             samples={sortedCustomSamples}
                             timeDomain={sharedTimeDomain}
                             events={events}
+                            focusRequest={focusRequest}
                             rangeRequest={rangeRequest}
                             onVisibleTimeRangeChange={
                                 requestVisibleTimeRange
@@ -282,12 +284,14 @@ export function MonitorChartsPanel({
                 <TimelineEventsPanel
                     events={events}
                     samples={samples}
-                    editable={editableEvents}
+                    canCreate={editableEvents}
+                    canModify={editableEvents}
                     busyAction={eventBusyAction}
                     errorText={eventErrorMessage || null}
                     requestedCreateTimestamp={requestedCreateTimestamp}
                     onCreateRequestHandled={() => setRequestedCreateTimestamp(null)}
                     onClearError={onClearEventError}
+                    onCaptureScreenshot={onCaptureScreenshotEvent}
                     onCreate={onCreateEvent}
                     onUpdate={onUpdateEvent}
                     onDelete={onDeleteEvent}

@@ -72,6 +72,12 @@ export function TimelineEventDialog({
     const [text, setText] = useState("");
     const [localError, setLocalError] = useState<string | null>(null);
     const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+    const isScreenshotEvent = type === "screenshot";
+    const availableTypePresets = TIMELINE_EVENT_TYPE_PRESETS.filter((preset) =>
+        preset.type === "screenshot"
+            ? mode === "edit" && isScreenshotEvent
+            : true
+    );
 
     useEffect(() => {
         if (!open || !initialValue) {
@@ -128,7 +134,7 @@ export function TimelineEventDialog({
             }
         }
 
-        if (!text.trim()) {
+        if (!text.trim() && !isScreenshotEvent) {
             setLocalError("事件内容不能为空。");
             return;
         }
@@ -138,17 +144,29 @@ export function TimelineEventDialog({
             timestamp,
             type,
             color,
-            text: text.trim()
+            text: text.trim(),
+            screenshotPath:
+                isScreenshotEvent && initialValue && "screenshotPath" in initialValue
+                    ? initialValue.screenshotPath
+                    : undefined
         });
     }
 
     return (
         <ModalDialog
             open={open}
-            title={mode === "create" ? "添加时间轴事件" : "编辑时间轴事件"}
+            title={
+                mode === "create"
+                    ? "添加时间轴事件"
+                    : isScreenshotEvent
+                      ? "编辑截图事件"
+                      : "编辑时间轴事件"
+            }
             description={
                 mode === "create"
                     ? "事件会显示在当前会话的全部图表上。"
+                    : isScreenshotEvent
+                      ? "截图已在实时监控时保存，这里可以补充备注或微调时间。"
                     : "修改后会同步更新当前会话的全部图表。"
             }
             onClose={busy ? undefined : onCancel}
@@ -191,7 +209,7 @@ export function TimelineEventDialog({
                             <select
                                 className={styles.selectInput}
                                 value={type}
-                                disabled={busy}
+                                disabled={busy || (mode === "edit" && isScreenshotEvent)}
                                 onChange={(event) => {
                                     const nextType =
                                         event.target.value as SessionTimelineEventInput["type"];
@@ -201,7 +219,7 @@ export function TimelineEventDialog({
                                     );
                                 }}
                             >
-                                {TIMELINE_EVENT_TYPE_PRESETS.map((preset) => (
+                                {availableTypePresets.map((preset) => (
                                     <option key={preset.type} value={preset.type}>
                                         {preset.label}
                                     </option>
@@ -228,7 +246,7 @@ export function TimelineEventDialog({
                             <span>类型说明</span>
                             <p className={styles.helperText}>
                                 {
-                                    TIMELINE_EVENT_TYPE_PRESETS.find(
+                                    availableTypePresets.find(
                                         (preset) => preset.type === type
                                     )?.description
                                 }
@@ -238,14 +256,20 @@ export function TimelineEventDialog({
 
                     <label className={styles.fieldLabel}>
                         <span>
-                            事件内容（{getTimelineEventTypeLabel(type)}）
+                            {isScreenshotEvent
+                                ? "截图备注（可选）"
+                                : `事件内容（${getTimelineEventTypeLabel(type)}）`}
                         </span>
                         <textarea
                             ref={textAreaRef}
                             className={styles.textArea}
                             value={text}
                             disabled={busy}
-                            placeholder="例如：点击开始战斗、进入结算界面、出现明显掉帧。"
+                            placeholder={
+                                isScreenshotEvent
+                                    ? "可选，例如：进入结算页时的画面。"
+                                    : "例如：点击开始战斗、进入结算界面、出现明显掉帧。"
+                            }
                             onChange={(event) => setText(event.target.value)}
                         />
                     </label>

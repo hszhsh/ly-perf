@@ -32,7 +32,7 @@ const METRIC_NAMES = [
 type CsvValue = string | number | boolean | null | undefined;
 type CsvRow = Record<string, CsvValue>;
 
-const METRIC_CSV_HEADERS = ["timestamp", "screenshot", ...METRIC_NAMES] as const;
+const METRIC_CSV_HEADERS = ["timestamp", ...METRIC_NAMES] as const;
 const EVENT_CSV_HEADERS = [
     "id",
     "timestamp",
@@ -106,18 +106,67 @@ function buildMetricRows(
     });
 }
 
-function buildEventRows(
+function buildCsvMetricRows(
     session: SessionDetail
-): Array<Record<string, string>> {
-    return session.events.map((event) => ({
+): Array<Record<string, number | string | null>> {
+    return session.samples.map((sample) => {
+        const row: Record<string, number | string | null> = {
+            timestamp: new Date(sample.timestamp).toISOString()
+        };
+
+        for (const metricName of METRIC_NAMES) {
+            row[metricName] = sample.metrics[metricName]?.value ?? null;
+        }
+
+        return row;
+    });
+}
+
+function getEventDisplayText(event: SessionDetail["events"][number]): string {
+    const normalizedText = event.text.trim();
+
+    if (normalizedText) {
+        return normalizedText;
+    }
+
+    return event.type === "screenshot" ? "截图" : "";
+}
+
+function toEventRow(
+    event: SessionDetail["events"][number],
+    text: string
+): Record<string, string> {
+    return {
         id: event.id,
         timestamp: new Date(event.timestamp).toISOString(),
         type: event.type,
         color: event.color,
-        text: event.text,
+        text,
         createdAt: new Date(event.createdAt).toISOString(),
         updatedAt: new Date(event.updatedAt).toISOString()
-    }));
+    };
+}
+
+function buildEventRows(
+    session: SessionDetail
+): Array<Record<string, string>> {
+    return session.events.map((event) =>
+        toEventRow(event, getEventDisplayText(event))
+    );
+}
+
+function buildCsvEventRows(
+    session: SessionDetail
+): Array<Record<string, string>> {
+    return session.events.flatMap((event) => {
+        const normalizedText = event.text.trim();
+
+        if (event.type === "screenshot" && !normalizedText) {
+            return [];
+        }
+
+        return [toEventRow(event, normalizedText || getEventDisplayText(event))];
+    });
 }
 
 function serializeChartDefinitionStats(
@@ -502,13 +551,13 @@ export class ReportService {
             writeCsvFile({
                 outputDir,
                 fileName: "metrics.csv",
-                rows: buildMetricRows(session),
+                rows: buildCsvMetricRows(session),
                 headers: METRIC_CSV_HEADERS
             }),
             writeCsvFile({
                 outputDir,
                 fileName: "events.csv",
-                rows: buildEventRows(session),
+                rows: buildCsvEventRows(session),
                 headers: EVENT_CSV_HEADERS
             })
         ];

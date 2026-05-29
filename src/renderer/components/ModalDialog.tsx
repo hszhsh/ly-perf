@@ -9,6 +9,8 @@ interface ModalDialogProps {
     children?: ReactNode;
     footer?: ReactNode;
     closeLabel?: string;
+    dialogClassName?: string;
+    bodyClassName?: string;
     onClose?: () => void;
 }
 
@@ -20,6 +22,8 @@ export function ModalDialog(props: ModalDialogProps) {
         children,
         footer,
         closeLabel = "关闭",
+        dialogClassName,
+        bodyClassName,
         onClose
     } = props;
     const titleId = useId();
@@ -83,7 +87,11 @@ export function ModalDialog(props: ModalDialogProps) {
             >
                 <div
                     ref={dialogRef}
-                    className={styles.dialog}
+                    className={
+                        dialogClassName
+                            ? `${styles.dialog} ${dialogClassName}`
+                            : styles.dialog
+                    }
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby={titleId}
@@ -118,7 +126,15 @@ export function ModalDialog(props: ModalDialogProps) {
                     </div>
 
                     {children ? (
-                        <div className={styles.body}>{children}</div>
+                        <div
+                            className={
+                                bodyClassName
+                                    ? `${styles.body} ${bodyClassName}`
+                                    : styles.body
+                            }
+                        >
+                            {children}
+                        </div>
                     ) : null}
                     {footer ? (
                         <div className={styles.footer}>{footer}</div>

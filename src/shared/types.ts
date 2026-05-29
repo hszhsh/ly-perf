@@ -195,7 +195,7 @@ export interface MonitorSample {
     capabilityReport?: MetricCapabilityReport;
 }
 
-export type SessionTimelineEventType = "note" | "action" | "issue";
+export type SessionTimelineEventType = "note" | "action" | "issue" | "screenshot";
 
 export interface SessionTimelineEvent {
     id: string;
@@ -203,6 +203,7 @@ export interface SessionTimelineEvent {
     type: SessionTimelineEventType;
     color: string;
     text: string;
+    screenshotPath?: string;
     createdAt: number;
     updatedAt: number;
 }
@@ -212,6 +213,7 @@ export interface SessionTimelineEventInput {
     type: SessionTimelineEventType;
     color: string;
     text: string;
+    screenshotPath?: string;
 }
 
 export interface SessionTimelineEventUpdate
@@ -324,6 +326,9 @@ export interface LyPerfApi {
     onMonitorSample: (handler: (sample: MonitorSample) => void) => () => void;
     listSessions: () => Promise<SessionSummary[]>;
     getSession: (sessionId: string) => Promise<SessionDetail>;
+    captureSessionScreenshotEvent: (
+        sessionId: string
+    ) => Promise<SessionDetail>;
     createSessionEvent: (
         sessionId: string,
         input: SessionTimelineEventInput

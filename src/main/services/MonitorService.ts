@@ -1,3 +1,4 @@
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
     CpuUsageMode,
@@ -25,9 +26,12 @@ interface ActiveMonitor {
     screenshotCapturing: boolean;
     lastScreenshotAt: number;
     persistenceChain: Promise<void>;
+    screenshotCaptureChain: Promise<void>;
     pendingScreenshotPath?: string;
     timer?: NodeJS.Timeout;
 }
+
+const SCREENSHOT_EVENT_COLOR = "#fcd34d";
 
 function normalizeInterval(value: number, fallback: number): number {
     if (!Number.isFinite(value) || value < 500) {
@@ -117,7 +121,8 @@ export class MonitorService {
             collecting: false,
             screenshotCapturing: false,
             lastScreenshotAt: 0,
-            persistenceChain: Promise.resolve()
+            persistenceChain: Promise.resolve(),
+            screenshotCaptureChain: Promise.resolve()
         };
 
         this.active = active;
@@ -146,6 +151,7 @@ export class MonitorService {
             await this.deepMonitor.stopSession();
         }
 
+        await active.screenshotCaptureChain;
         await active.persistenceChain;
         active.session.endedAt = Date.now();
         await this.sessionStore.finalizeSessionJournal(active.session);
@@ -161,6 +167,29 @@ export class MonitorService {
     ): Promise<SessionDetail> {
         const active = this.requireActiveSession(sessionId);
         const updated = this.sessionStore.withCreatedEvent(active.session, input);
+
+        active.session = updated;
+        await this.sessionStore.updateSessionJournalMetadata(updated);
+
+        return updated;
+    }
+
+    async captureSessionScreenshotEvent(
+        sessionId: string
+    ): Promise<SessionDetail> {
+        const active = this.requireActiveSession(sessionId);
+        const requestedAt = Date.now();
+        const screenshotPath = await this.captureScreenshot(active, {
+            requestedAt,
+            filePrefix: "event"
+        });
+        const updated = this.sessionStore.withCreatedEvent(active.session, {
+            timestamp: requestedAt,
+            type: "screenshot",
+            color: SCREENSHOT_EVENT_COLOR,
+            text: "",
+            screenshotPath
+        });
 
         active.session = updated;
         await this.sessionStore.updateSessionJournalMetadata(updated);
@@ -391,24 +420,16 @@ export class MonitorService {
             return;
         }
 
-        const screenshotDir = this.sessionStore.getScreenshotDir(
-            active.session.id
-        );
-        const fileName = `${now}.png`;
-        const screenshotPath = path.join(screenshotDir, fileName);
-        active.screenshotCapturing = true;
-
-        void this.adb
-            .captureScreen(active.session.serial, screenshotPath)
-            .then(() => {
+        void this.captureScreenshot(active, {
+            requestedAt: now,
+            filePrefix: "sample"
+        })
+            .then((screenshotPath) => {
                 active.lastScreenshotAt = now;
                 active.pendingScreenshotPath = screenshotPath;
             })
             .catch((error) => {
                 console.warn("Capture screenshot failed:", error);
-            })
-            .finally(() => {
-                active.screenshotCapturing = false;
             });
     }
 
@@ -418,6 +439,59 @@ export class MonitorService {
         const screenshotPath = active.pendingScreenshotPath;
         active.pendingScreenshotPath = undefined;
         return screenshotPath;
+    }
+
+    private async captureScreenshot(
+        active: ActiveMonitor,
+        options: {
+            requestedAt: number;
+            filePrefix: "event" | "sample";
+        }
+    ): Promise<string> {
+        const screenshotDir = this.sessionStore.getScreenshotDir(
+            active.session.id
+        );
+        const screenshotPath = path.join(
+            screenshotDir,
+            `${options.filePrefix}-${options.requestedAt}.png`
+        );
+
+        await this.queueScreenshotCapture(active, async () => {
+            await fs.mkdir(screenshotDir, { recursive: true });
+            await this.adb.captureScreen(active.session.serial, screenshotPath);
+        });
+
+        return screenshotPath;
+    }
+
+    private async queueScreenshotCapture<T>(
+        active: ActiveMonitor,
+        task: () => Promise<T>
+    ): Promise<T> {
+        const previous = active.screenshotCaptureChain;
+        let result: T | undefined;
+        let thrown: unknown;
+
+        active.screenshotCaptureChain = (async () => {
+            await previous.catch(() => undefined);
+            active.screenshotCapturing = true;
+
+            try {
+                result = await task();
+            } catch (error) {
+                thrown = error;
+            } finally {
+                active.screenshotCapturing = false;
+            }
+        })();
+
+        await active.screenshotCaptureChain;
+
+        if (thrown !== undefined) {
+            throw thrown;
+        }
+
+        return result as T;
     }
 
     private enqueuePersistence(

@@ -21,7 +21,12 @@ interface SessionJournalMetadata
 function isValidEventType(
     value: string | undefined
 ): value is SessionTimelineEvent["type"] {
-    return value === "note" || value === "action" || value === "issue";
+    return (
+        value === "note" ||
+        value === "action" ||
+        value === "issue" ||
+        value === "screenshot"
+    );
 }
 
 export class SessionStore {
@@ -265,9 +270,13 @@ export class SessionStore {
         input: SessionTimelineEventInput
     ): SessionDetail {
         const timestamp = this.normalizeEventTimestamp(input.timestamp);
-        const text = this.normalizeEventText(input.text);
-        const color = this.normalizeEventColor(input.color);
         const type = this.normalizeEventType(input.type);
+        const text = this.normalizeEventText(input.text, type);
+        const color = this.normalizeEventColor(input.color);
+        const screenshotPath = this.normalizeEventScreenshotPath(
+            input.screenshotPath,
+            type === "screenshot"
+        );
         const now = Date.now();
         const nextEvent: SessionTimelineEvent = {
             id: randomUUID(),
@@ -275,6 +284,7 @@ export class SessionStore {
             type,
             color,
             text,
+            screenshotPath,
             createdAt: now,
             updatedAt: now
         };
@@ -300,9 +310,16 @@ export class SessionStore {
         }
 
         const timestamp = this.normalizeEventTimestamp(input.timestamp);
-        const text = this.normalizeEventText(input.text);
+        const type =
+            existingEvent.type === "screenshot"
+                ? "screenshot"
+                : this.normalizeEventType(input.type);
+        const text = this.normalizeEventText(input.text, type);
         const color = this.normalizeEventColor(input.color);
-        const type = this.normalizeEventType(input.type);
+        const screenshotPath = this.normalizeEventScreenshotPath(
+            input.screenshotPath ?? existingEvent.screenshotPath,
+            type === "screenshot"
+        );
         const updatedAt = Date.now();
 
         return this.normalizeSession({
@@ -315,6 +332,7 @@ export class SessionStore {
                           type,
                           color,
                           text,
+                                                    screenshotPath,
                           updatedAt
                       }
                     : event
@@ -409,8 +427,18 @@ export class SessionStore {
         }
 
         return events
-            .map((event) => {
+            .map<SessionTimelineEvent | null>((event) => {
                 const normalizedText = event?.text?.trim();
+                const screenshotPath =
+                    event.type === "screenshot"
+                        ? this.normalizeEventScreenshotPath(
+                              event.screenshotPath,
+                              true
+                          )
+                        : this.normalizeEventScreenshotPath(
+                              event.screenshotPath,
+                              false
+                          );
                 if (
                     !event ||
                     typeof event.id !== "string" ||
@@ -420,7 +448,7 @@ export class SessionStore {
                     !isValidEventType(event.type) ||
                     typeof event.color !== "string" ||
                     !event.color ||
-                    !normalizedText
+                    (!normalizedText && event.type !== "screenshot")
                 ) {
                     return null;
                 }
@@ -436,15 +464,21 @@ export class SessionStore {
                         ? event.updatedAt
                         : createdAt;
 
-                return {
+                const normalizedEvent: SessionTimelineEvent = {
                     id: event.id,
                     timestamp: event.timestamp,
                     type: event.type,
                     color: event.color,
-                    text: normalizedText,
+                    text: normalizedText ?? "",
                     createdAt,
                     updatedAt
-                } satisfies SessionTimelineEvent;
+                };
+
+                if (screenshotPath) {
+                    normalizedEvent.screenshotPath = screenshotPath;
+                }
+
+                return normalizedEvent;
             })
             .filter(
                 (event): event is SessionTimelineEvent => event !== null
@@ -460,10 +494,13 @@ export class SessionStore {
         return Math.floor(timestamp);
     }
 
-    private normalizeEventText(text: string): string {
-        const normalizedText = text?.trim();
+    private normalizeEventText(
+        text: string,
+        type: SessionTimelineEvent["type"]
+    ): string {
+        const normalizedText = text?.trim() ?? "";
 
-        if (!normalizedText) {
+        if (!normalizedText && type !== "screenshot") {
             throw new Error("事件内容不能为空。");
         }
 
@@ -488,6 +525,31 @@ export class SessionStore {
         }
 
         return type;
+    }
+
+    private normalizeEventScreenshotPath(
+        screenshotPath: string | undefined,
+        required: boolean
+    ): string | undefined {
+        const normalizedScreenshotPath = screenshotPath?.trim();
+
+        if (!normalizedScreenshotPath) {
+            if (required) {
+                throw new Error("截图路径无效。");
+            }
+
+            return undefined;
+        }
+
+        if (!path.isAbsolute(normalizedScreenshotPath)) {
+            if (required) {
+                throw new Error("截图路径无效。");
+            }
+
+            return undefined;
+        }
+
+        return normalizedScreenshotPath;
     }
 
     private normalizePersistenceState(

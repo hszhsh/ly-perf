@@ -34,7 +34,6 @@ export function ReportsPage() {
         openDeleteDialog,
         closeDeleteDialog,
         handleDelete,
-        handleCreateEvent,
         handleUpdateEvent,
         handleDeleteEvent
     } = useReportsRuntime();
@@ -134,7 +133,6 @@ export function ReportsPage() {
                                 eventBusyAction={eventBusyAction}
                                 eventErrorMessage={eventErrorMessage}
                                 onClearEventError={clearEventError}
-                                onCreateEvent={handleCreateEvent}
                                 onUpdateEvent={handleUpdateEvent}
                                 onDeleteEvent={handleDeleteEvent}
                             />

@@ -152,15 +152,29 @@ export function registerIpcHandlers(deps: RegisterIpcDependencies): void {
     );
 
     ipcMain.handle(
+        IPC_CHANNELS.captureSessionScreenshotEvent,
+        async (_event, sessionId: string) => {
+            if (!hasActiveSession(sessionId)) {
+                throw new Error("截图事件只能在实时监控中添加。");
+            }
+
+            return deps.monitorService.captureSessionScreenshotEvent(sessionId);
+        }
+    );
+
+    ipcMain.handle(
         IPC_CHANNELS.createSessionEvent,
         async (
             _event,
             sessionId: string,
             input: SessionTimelineEventInput
-        ) =>
-            hasActiveSession(sessionId)
-                ? deps.monitorService.createSessionEvent(sessionId, input)
-                : deps.sessionStore.createSessionEvent(sessionId, input)
+        ) => {
+            if (!hasActiveSession(sessionId)) {
+                throw new Error("历史报告不支持新增事件，请在实时监控时添加。");
+            }
+
+            return deps.monitorService.createSessionEvent(sessionId, input);
+        }
     );
 
     ipcMain.handle(

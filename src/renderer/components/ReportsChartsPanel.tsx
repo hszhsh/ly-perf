@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import type {
     DeepMonitorSample,
     SessionDetail,
-    SessionTimelineEventInput,
     SessionTimelineEventUpdate
 } from "@shared/types";
 import {
@@ -64,7 +63,6 @@ interface ReportsChartsPanelProps {
     eventBusyAction: "create" | "update" | "delete" | null;
     eventErrorMessage: string | null;
     onClearEventError: () => void;
-    onCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
     onUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
     onDeleteEvent: (eventId: string) => Promise<boolean>;
 }
@@ -99,13 +97,9 @@ export function ReportsChartsPanel({
     eventBusyAction,
     eventErrorMessage,
     onClearEventError,
-    onCreateEvent,
     onUpdateEvent,
     onDeleteEvent
 }: ReportsChartsPanelProps) {
-    const [requestedCreateTimestamp, setRequestedCreateTimestamp] = useState<
-        number | null
-    >(null);
     const [focusRequest, setFocusRequest] = useState<ChartFocusRequest | null>(
         null
     );
@@ -153,16 +147,10 @@ export function ReportsChartsPanel({
     function requestFocusTimestamp(timestamp: number): void {
         const normalizedTimestamp = Math.floor(timestamp);
 
-        setFocusRequest((current) => {
-            if (current?.timestamp === normalizedTimestamp) {
-                return current;
-            }
-
-            return {
-                id: (current?.id ?? 0) + 1,
-                timestamp: normalizedTimestamp
-            };
-        });
+        setFocusRequest((current) => ({
+            id: (current?.id ?? 0) + 1,
+            timestamp: normalizedTimestamp
+        }));
     }
 
     function requestVisibleTimeRange(range: ChartTimeDomain): void {
@@ -232,9 +220,9 @@ export function ReportsChartsPanel({
                         samples={sessionDetail.samples}
                         timeDomain={sharedTimeDomain}
                         events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         rangeRequest={rangeRequest}
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
-                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={FPS_CHART_SERIES}
                     />
@@ -244,9 +232,9 @@ export function ReportsChartsPanel({
                         samples={sessionDetail.samples}
                         timeDomain={sharedTimeDomain}
                         events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         rangeRequest={rangeRequest}
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
-                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         onVisibleRangeChange={onLoadChartRangeChange}
                         series={getLoadChartSeries(sessionDetail.config.cpuMode)}
@@ -297,9 +285,9 @@ export function ReportsChartsPanel({
                         samples={sessionDetail.samples}
                         timeDomain={sharedTimeDomain}
                         events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         rangeRequest={rangeRequest}
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
-                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={MEMORY_CHART_SERIES}
                     />
@@ -309,9 +297,9 @@ export function ReportsChartsPanel({
                         samples={sessionDetail.samples}
                         timeDomain={sharedTimeDomain}
                         events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         rangeRequest={rangeRequest}
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
-                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={THROUGHPUT_CHART_SERIES}
                     />
@@ -321,9 +309,9 @@ export function ReportsChartsPanel({
                         samples={sessionDetail.samples}
                         timeDomain={sharedTimeDomain}
                         events={sessionDetail.events}
+                        focusRequest={focusRequest}
                         rangeRequest={rangeRequest}
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
-                        onAddEventAtTimestamp={setRequestedCreateTimestamp}
                         onSampleFocus={onSampleFocus}
                         series={THERMAL_POWER_CHART_SERIES}
                     />
@@ -343,12 +331,10 @@ export function ReportsChartsPanel({
                                     samples={sortedCustomSamples}
                                     timeDomain={sharedTimeDomain}
                                     events={sessionDetail.events}
+                                    focusRequest={focusRequest}
                                     rangeRequest={rangeRequest}
                                     onVisibleTimeRangeChange={
                                         requestVisibleTimeRange
-                                    }
-                                    onAddEventAtTimestamp={
-                                        setRequestedCreateTimestamp
                                     }
                                     onSampleFocus={(sampleIndex) =>
                                         handleCustomSampleFocus(
@@ -453,15 +439,11 @@ export function ReportsChartsPanel({
                 <TimelineEventsPanel
                     events={sessionDetail.events}
                     samples={sessionDetail.samples}
-                    editable
+                    canCreate={false}
+                    canModify
                     busyAction={eventBusyAction}
                     errorText={eventErrorMessage}
-                    requestedCreateTimestamp={requestedCreateTimestamp}
-                    onCreateRequestHandled={() =>
-                        setRequestedCreateTimestamp(null)
-                    }
                     onClearError={onClearEventError}
-                    onCreate={onCreateEvent}
                     onUpdate={onUpdateEvent}
                     onDelete={onDeleteEvent}
                     onLocateTimestamp={handleLocateTimestamp}

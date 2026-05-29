@@ -102,6 +102,11 @@ const api: LyPerfApi = {
             IPC_CHANNELS.getSession,
             sessionId
         ) as Promise<SessionDetail>,
+    captureSessionScreenshotEvent: (sessionId: string) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.captureSessionScreenshotEvent,
+            sessionId
+        ) as Promise<SessionDetail>,
     createSessionEvent: (
         sessionId: string,
         input: SessionTimelineEventInput

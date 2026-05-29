@@ -18,7 +18,7 @@ import type {
 } from "@shared/types";
 import type { MonitorSettingsState } from "@renderer/hooks/useMonitorSettings";
 
-type EventBusyAction = "create" | "update" | "delete";
+type EventBusyAction = "capture" | "create" | "update" | "delete";
 
 interface UseMonitorRuntimeResult {
     runtimeInfo: RuntimeInfo | null;
@@ -46,6 +46,7 @@ interface UseMonitorRuntimeResult {
     refreshApps: (serial: string) => Promise<void>;
     handleStart: () => Promise<void>;
     handleStop: () => Promise<void>;
+    handleCaptureScreenshotEvent: () => Promise<boolean>;
     handleCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
     handleUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
     handleDeleteEvent: (eventId: string) => Promise<boolean>;
@@ -416,6 +417,12 @@ export function useMonitorRuntime(
         );
     }
 
+    async function handleCaptureScreenshotEvent(): Promise<boolean> {
+        return mutateSessionEvent("capture", "截图事件添加失败。", (sessionId) =>
+            window.lyPerf.captureSessionScreenshotEvent(sessionId)
+        );
+    }
+
     async function handleUpdateEvent(
         input: SessionTimelineEventUpdate
     ): Promise<boolean> {
@@ -456,6 +463,7 @@ export function useMonitorRuntime(
         refreshApps,
         handleStart,
         handleStop,
+        handleCaptureScreenshotEvent,
         handleCreateEvent,
         handleUpdateEvent,
         handleDeleteEvent

@@ -55,6 +55,7 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         refreshApps,
         handleStart,
         handleStop,
+        handleCaptureScreenshotEvent,
         handleCreateEvent,
         handleUpdateEvent,
         handleDeleteEvent
@@ -147,6 +148,7 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
                     eventBusyAction={eventBusyAction}
                     eventErrorMessage={eventErrorMessage}
                     onClearEventError={clearEventError}
+                    onCaptureScreenshotEvent={handleCaptureScreenshotEvent}
                     onCreateEvent={handleCreateEvent}
                     onUpdateEvent={handleUpdateEvent}
                     onDeleteEvent={handleDeleteEvent}
