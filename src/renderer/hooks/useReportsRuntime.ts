@@ -7,7 +7,12 @@ import type {
     SessionSummary
 } from "@shared/types";
 
-export type BusyAction = "delete" | "export-html" | "export-xlsx" | "rename";
+export type BusyAction =
+    | "delete"
+    | "export-html"
+    | "export-xlsx"
+    | "export-csv"
+    | "rename";
 export type EventBusyAction = "create" | "update" | "delete";
 
 export interface FeedbackState {
@@ -41,7 +46,7 @@ interface UseReportsRuntimeResult {
     deleteDialogOpen: boolean;
     reloadSessions: () => Promise<void>;
     setSelectedSessionId: React.Dispatch<React.SetStateAction<string>>;
-    handleExport: (format: "html" | "xlsx") => Promise<void>;
+    handleExport: (format: "html" | "xlsx" | "csv") => Promise<void>;
     openRenameDialog: () => void;
     closeRenameDialog: () => void;
     handleRename: (nextName: string) => Promise<void>;
@@ -149,12 +154,14 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         };
     }, [selectedSessionId]);
 
-    async function handleExport(format: "html" | "xlsx"): Promise<void> {
+    async function handleExport(
+        format: "html" | "xlsx" | "csv"
+    ): Promise<void> {
         if (!selectedSessionId) {
             return;
         }
 
-        setBusyAction(format === "html" ? "export-html" : "export-xlsx");
+        setBusyAction(`export-${format}`);
 
         try {
             const result = await window.lyPerf.exportSession(
@@ -162,7 +169,19 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
                 format
             );
             setExportResult(result);
-            setFeedback(null);
+
+            try {
+                await window.lyPerf.openExportDirectory(result.outputPath);
+                setFeedback(null);
+            } catch (error) {
+                showFeedback(
+                    "error",
+                    getErrorMessage(
+                        error,
+                        "报告已导出，但打开导出目录失败。"
+                    )
+                );
+            }
         } catch (error) {
             showFeedback("error", getErrorMessage(error, "导出历史会话失败。"));
         } finally {

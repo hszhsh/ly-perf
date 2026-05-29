@@ -6,7 +6,13 @@ interface ReportsSessionDialogsProps {
     renameDialogOpen: boolean;
     renameDialogError: string | null;
     deleteDialogOpen: boolean;
-    busyAction: "delete" | "export-html" | "export-xlsx" | "rename" | null;
+    busyAction:
+        | "delete"
+        | "export-html"
+        | "export-xlsx"
+        | "export-csv"
+        | "rename"
+        | null;
     onCancelRename: () => void;
     onConfirmRename: (value: string) => void;
     onCancelDelete: () => void;

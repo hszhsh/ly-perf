@@ -29,8 +29,95 @@ const METRIC_NAMES = [
     "temperature"
 ] as const;
 
+type CsvValue = string | number | boolean | null | undefined;
+type CsvRow = Record<string, CsvValue>;
+
+const METRIC_CSV_HEADERS = ["timestamp", "screenshot", ...METRIC_NAMES] as const;
+const EVENT_CSV_HEADERS = [
+    "id",
+    "timestamp",
+    "type",
+    "color",
+    "text",
+    "createdAt",
+    "updatedAt"
+] as const;
+const CUSTOM_METRIC_HEADERS = [
+    "key",
+    "label",
+    "unit",
+    "color",
+    "valueType",
+    "aggregationHint",
+    "description"
+] as const;
+const CUSTOM_CHART_HEADERS = [
+    "id",
+    "title",
+    "order",
+    "metricKeys",
+    "description",
+    "yAxisLabel",
+    "yAxisUnit",
+    "statsEnabled",
+    "statsScope",
+    "statsSurface",
+    "statsComputations",
+    "statsMetricKeys"
+] as const;
+const CUSTOM_SCHEMA_HISTORY_HEADERS = [
+    "revision",
+    "declaredAt",
+    "protocolVersion",
+    "metricCount",
+    "chartCount"
+] as const;
+const CUSTOM_STATE_INTERVAL_HEADERS = [
+    "chartId",
+    "chartTitle",
+    "metricKey",
+    "metricLabel",
+    "valueType",
+    "startTimestamp",
+    "endTimestamp",
+    "durationMs",
+    "sampleCount",
+    "value"
+] as const;
+
 function toWebPath(value: string): string {
     return value.split(path.sep).join("/");
+}
+
+function buildMetricRows(
+    session: SessionDetail
+): Array<Record<string, number | string | null>> {
+    return session.samples.map((sample) => {
+        const row: Record<string, number | string | null> = {
+            timestamp: new Date(sample.timestamp).toISOString(),
+            screenshot: sample.screenshotPath ?? ""
+        };
+
+        for (const metricName of METRIC_NAMES) {
+            row[metricName] = sample.metrics[metricName]?.value ?? null;
+        }
+
+        return row;
+    });
+}
+
+function buildEventRows(
+    session: SessionDetail
+): Array<Record<string, string>> {
+    return session.events.map((event) => ({
+        id: event.id,
+        timestamp: new Date(event.timestamp).toISOString(),
+        type: event.type,
+        color: event.color,
+        text: event.text,
+        createdAt: new Date(event.createdAt).toISOString(),
+        updatedAt: new Date(event.updatedAt).toISOString()
+    }));
 }
 
 function serializeChartDefinitionStats(
@@ -245,6 +332,94 @@ function buildCustomMetricDefinitionRows(
     }));
 }
 
+function buildCustomChartRows(
+    definitions: DeepMonitorChartDefinition[] | undefined
+): Array<Record<string, string | number | boolean | null>> {
+    return (definitions ?? []).map((definition) =>
+        serializeChartDefinitionStats(definition)
+    );
+}
+
+function buildCustomSchemaHistoryRows(
+    schemaHistory: SessionDetail["customSchemaHistory"]
+): Array<Record<string, string | number | null>> {
+    return (schemaHistory ?? []).map((revision) => ({
+        revision: revision.revision,
+        declaredAt: new Date(revision.declaredAt).toISOString(),
+        protocolVersion: revision.protocolVersion ?? null,
+        metricCount: revision.metrics.length,
+        chartCount: revision.charts.length
+    }));
+}
+
+function collectCsvHeaders(
+    rows: CsvRow[],
+    preferredHeaders?: readonly string[]
+): string[] {
+    const headers = [...(preferredHeaders ?? [])];
+    const seen = new Set(headers);
+
+    for (const row of rows) {
+        for (const key of Object.keys(row)) {
+            if (!seen.has(key)) {
+                seen.add(key);
+                headers.push(key);
+            }
+        }
+    }
+
+    return headers;
+}
+
+function serializeCsvCell(value: CsvValue): string {
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    const normalized = String(value);
+
+    if (/[",\r\n]/.test(normalized)) {
+        return `"${normalized.replace(/"/g, '""')}"`;
+    }
+
+    return normalized;
+}
+
+function serializeCsvRows(rows: CsvRow[], headers?: readonly string[]): string {
+    const resolvedHeaders = collectCsvHeaders(rows, headers);
+
+    if (resolvedHeaders.length === 0) {
+        return "";
+    }
+
+    const lines = [resolvedHeaders.map((header) => serializeCsvCell(header)).join(",")];
+
+    for (const row of rows) {
+        lines.push(
+            resolvedHeaders
+                .map((header) => serializeCsvCell(row[header]))
+                .join(",")
+        );
+    }
+
+    return `\uFEFF${lines.join("\r\n")}\r\n`;
+}
+
+async function writeCsvFile(params: {
+    outputDir: string;
+    fileName: string;
+    rows: CsvRow[];
+    headers?: readonly string[];
+}): Promise<void> {
+    const { outputDir, fileName, rows, headers } = params;
+
+    await fs.writeFile(
+        path.join(outputDir, fileName),
+        serializeCsvRows(rows, headers),
+        "utf8"
+    );
+}
+
 export class ReportService {
     constructor(
         private readonly store: SessionStore,
@@ -253,10 +428,14 @@ export class ReportService {
 
     async exportSession(
         sessionId: string,
-        format: "html" | "xlsx"
+        format: "html" | "xlsx" | "csv"
     ): Promise<ExportResult> {
         if (format === "html") {
             return this.exportHtml(sessionId);
+        }
+
+        if (format === "csv") {
+            return this.exportCsv(sessionId);
         }
 
         return this.exportXlsx(sessionId);
@@ -306,6 +485,100 @@ export class ReportService {
         };
     }
 
+    private async exportCsv(sessionId: string): Promise<ExportResult> {
+        const session = await this.store.getSession(sessionId);
+        const outputDir = path.join(
+            this.store.getDataDir(),
+            "exports",
+            sessionId,
+            "csv"
+        );
+
+        await fs.rm(outputDir, { recursive: true, force: true });
+        await fs.mkdir(outputDir, { recursive: true });
+
+        const customStateIntervalRows = buildCustomStateIntervalRows(session);
+        const writes: Promise<void>[] = [
+            writeCsvFile({
+                outputDir,
+                fileName: "metrics.csv",
+                rows: buildMetricRows(session),
+                headers: METRIC_CSV_HEADERS
+            }),
+            writeCsvFile({
+                outputDir,
+                fileName: "events.csv",
+                rows: buildEventRows(session),
+                headers: EVENT_CSV_HEADERS
+            })
+        ];
+
+        if ((session.customMetricDefinitions?.length ?? 0) > 0) {
+            writes.push(
+                writeCsvFile({
+                    outputDir,
+                    fileName: "custom_metrics.csv",
+                    rows: buildCustomMetricDefinitionRows(
+                        session.customMetricDefinitions
+                    ),
+                    headers: CUSTOM_METRIC_HEADERS
+                })
+            );
+        }
+
+        if ((session.customChartDefinitions?.length ?? 0) > 0) {
+            writes.push(
+                writeCsvFile({
+                    outputDir,
+                    fileName: "custom_charts.csv",
+                    rows: buildCustomChartRows(session.customChartDefinitions),
+                    headers: CUSTOM_CHART_HEADERS
+                })
+            );
+        }
+
+        if ((session.customSchemaHistory?.length ?? 0) > 0) {
+            writes.push(
+                writeCsvFile({
+                    outputDir,
+                    fileName: "custom_schema_history.csv",
+                    rows: buildCustomSchemaHistoryRows(
+                        session.customSchemaHistory
+                    ),
+                    headers: CUSTOM_SCHEMA_HISTORY_HEADERS
+                })
+            );
+        }
+
+        if ((session.customSamples?.length ?? 0) > 0) {
+            writes.push(
+                writeCsvFile({
+                    outputDir,
+                    fileName: "custom_samples.csv",
+                    rows: buildCustomSampleRows(session)
+                })
+            );
+        }
+
+        if (customStateIntervalRows.length > 0) {
+            writes.push(
+                writeCsvFile({
+                    outputDir,
+                    fileName: "custom_state_intervals.csv",
+                    rows: customStateIntervalRows,
+                    headers: CUSTOM_STATE_INTERVAL_HEADERS
+                })
+            );
+        }
+
+        await Promise.all(writes);
+
+        return {
+            format: "csv",
+            outputPath: outputDir
+        };
+    }
+
     private async exportXlsx(sessionId: string): Promise<ExportResult> {
         const session = await this.store.getSession(sessionId);
         const outputDir = path.join(
@@ -317,41 +590,12 @@ export class ReportService {
 
         await fs.mkdir(outputDir, { recursive: true });
 
-        const rows = session.samples.map((sample) => {
-            const row: Record<string, number | string | null> = {
-                timestamp: new Date(sample.timestamp).toISOString(),
-                screenshot: sample.screenshotPath ?? ""
-            };
-
-            for (const metricName of METRIC_NAMES) {
-                row[metricName] = sample.metrics[metricName]?.value ?? null;
-            }
-
-            return row;
-        });
-
         const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const worksheet = XLSX.utils.json_to_sheet(buildMetricRows(session));
         const eventWorksheet = XLSX.utils.json_to_sheet(
-            session.events.map((event) => ({
-                id: event.id,
-                timestamp: new Date(event.timestamp).toISOString(),
-                type: event.type,
-                color: event.color,
-                text: event.text,
-                createdAt: new Date(event.createdAt).toISOString(),
-                updatedAt: new Date(event.updatedAt).toISOString()
-            })),
+            buildEventRows(session),
             {
-                header: [
-                    "id",
-                    "timestamp",
-                    "type",
-                    "color",
-                    "text",
-                    "createdAt",
-                    "updatedAt"
-                ]
+                header: [...EVENT_CSV_HEADERS]
             }
         );
 
@@ -372,9 +616,7 @@ export class ReportService {
 
         if ((session.customChartDefinitions?.length ?? 0) > 0) {
             const customChartWorksheet = XLSX.utils.json_to_sheet(
-                (session.customChartDefinitions ?? []).map((definition) =>
-                    serializeChartDefinitionStats(definition)
-                )
+                buildCustomChartRows(session.customChartDefinitions)
             );
 
             XLSX.utils.book_append_sheet(
@@ -386,13 +628,7 @@ export class ReportService {
 
         if ((session.customSchemaHistory?.length ?? 0) > 0) {
             const schemaWorksheet = XLSX.utils.json_to_sheet(
-                (session.customSchemaHistory ?? []).map((revision) => ({
-                    revision: revision.revision,
-                    declaredAt: new Date(revision.declaredAt).toISOString(),
-                    protocolVersion: revision.protocolVersion ?? null,
-                    metricCount: revision.metrics.length,
-                    chartCount: revision.charts.length
-                }))
+                buildCustomSchemaHistoryRows(session.customSchemaHistory)
             );
 
             XLSX.utils.book_append_sheet(

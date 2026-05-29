@@ -1,4 +1,6 @@
 import type { ExportResult, SessionDetail } from "@shared/types";
+import { Menu, type MenuItem } from "@renderer/components/Menu";
+import { Popover } from "@renderer/components/Popover";
 import { SessionPersistenceBadge } from "@renderer/components/SessionPersistenceBadge";
 import {
     formatDateTime,
@@ -14,6 +16,7 @@ interface ReportsSessionOverviewProps {
     onRename: () => void;
     onDelete: () => void;
     onExportHtml: () => void;
+    onExportCsv: () => void;
     onExportXlsx: () => void;
 }
 
@@ -33,8 +36,30 @@ export function ReportsSessionOverview({
     onRename,
     onDelete,
     onExportHtml,
+    onExportCsv,
     onExportXlsx
 }: ReportsSessionOverviewProps) {
+    const exportMenuItems: MenuItem[] = [
+        {
+            id: "html",
+            label: "导出 HTML",
+            description: "导出单文件图表报告",
+            onSelect: onExportHtml
+        },
+        {
+            id: "csv",
+            label: "导出 CSV",
+            description: "导出指标与事件 CSV 目录",
+            onSelect: onExportCsv
+        },
+        {
+            id: "xlsx",
+            label: "导出 XLSX",
+            description: "导出多工作表 Excel 报告",
+            onSelect: onExportXlsx
+        }
+    ];
+
     return (
         <>
             <header className={styles.detailHeader}>
@@ -71,20 +96,36 @@ export function ReportsSessionOverview({
                         </button>
                     </div>
                     <div className={styles.exportButtons}>
-                        <button
-                            type="button"
+                        <Popover
+                            hasPopup="menu"
+                            placement="bottom-end"
                             disabled={controlsDisabled}
-                            onClick={onExportHtml}
+                            content={({ close }) => (
+                                <Menu
+                                    ariaLabel="导出报告格式"
+                                    items={exportMenuItems}
+                                    onRequestClose={close}
+                                />
+                            )}
                         >
-                            导出 HTML
-                        </button>
-                        <button
-                            type="button"
-                            disabled={controlsDisabled}
-                            onClick={onExportXlsx}
-                        >
-                            导出 XLSX
-                        </button>
+                            {({ triggerRef, triggerProps, open }) => (
+                                <button
+                                    ref={triggerRef}
+                                    type="button"
+                                    className={`${styles.exportMenuTrigger} ${open ? styles.exportMenuTriggerOpen : ""}`}
+                                    disabled={controlsDisabled}
+                                    {...triggerProps}
+                                >
+                                    <span>导出</span>
+                                    <span
+                                        className={`${styles.exportMenuArrow} ${open ? styles.exportMenuArrowOpen : ""}`}
+                                        aria-hidden
+                                    >
+                                        ▼
+                                    </span>
+                                </button>
+                            )}
+                        </Popover>
                     </div>
                 </div>
             </header>

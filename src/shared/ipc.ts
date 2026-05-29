@@ -19,5 +19,6 @@ export const IPC_CHANNELS = {
     deleteSessionEvent: "report:delete-session-event",
     renameSession: "report:rename-session",
     deleteSession: "report:delete-session",
-    exportSession: "report:export-session"
+    exportSession: "report:export-session",
+    openExportDirectory: "report:open-export-directory"
 } as const;

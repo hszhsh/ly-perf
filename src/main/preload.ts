@@ -137,12 +137,17 @@ const api: LyPerfApi = {
             IPC_CHANNELS.deleteSession,
             sessionId
         ) as Promise<void>,
-    exportSession: (sessionId: string, format: "html" | "xlsx") =>
+    exportSession: (sessionId: string, format: "html" | "xlsx" | "csv") =>
         ipcRenderer.invoke(
             IPC_CHANNELS.exportSession,
             sessionId,
             format
-        ) as Promise<ExportResult>
+        ) as Promise<ExportResult>,
+    openExportDirectory: (outputPath: string) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.openExportDirectory,
+            outputPath
+        ) as Promise<void>
 };
 
 contextBridge.exposeInMainWorld("lyPerf", api);

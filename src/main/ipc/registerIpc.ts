@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
     MonitorConfig,
@@ -32,6 +32,36 @@ function isPathInside(parentPath: string, targetPath: string): boolean {
         relativePath === "" ||
         (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
     );
+}
+
+async function openContainingDirectory(
+    dataDirPath: string,
+    targetPath: string
+): Promise<void> {
+    if (!targetPath) {
+        throw new Error("导出路径不能为空。");
+    }
+
+    const resolvedPath = path.resolve(targetPath);
+    if (!isPathInside(dataDirPath, resolvedPath)) {
+        throw new Error("只允许打开应用数据目录内的导出路径。");
+    }
+
+    let directoryPath = resolvedPath;
+
+    try {
+        const targetStats = await fs.stat(resolvedPath);
+        if (!targetStats.isDirectory()) {
+            directoryPath = path.dirname(resolvedPath);
+        }
+    } catch {
+        directoryPath = path.dirname(resolvedPath);
+    }
+
+    const openError = await shell.openPath(directoryPath);
+    if (openError) {
+        throw new Error(openError);
+    }
 }
 
 interface RegisterIpcDependencies {
@@ -167,7 +197,13 @@ export function registerIpcHandlers(deps: RegisterIpcDependencies): void {
 
     ipcMain.handle(
         IPC_CHANNELS.exportSession,
-        async (_event, sessionId: string, format: "html" | "xlsx") =>
+        async (_event, sessionId: string, format: "html" | "xlsx" | "csv") =>
             deps.reportService.exportSession(sessionId, format)
+    );
+
+    ipcMain.handle(
+        IPC_CHANNELS.openExportDirectory,
+        async (_event, outputPath: string) =>
+            openContainingDirectory(dataDirPath, outputPath)
     );
 }

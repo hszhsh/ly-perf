@@ -1,0 +1,46 @@
+.menu {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.item {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid rgba(98, 131, 162, 0.32);
+  border-radius: 10px;
+  background: rgba(14, 23, 35, 0.92);
+  color: var(--text-0);
+}
+
+.item:hover:not(:disabled),
+.itemActive {
+  border-color: rgba(127, 176, 214, 0.92);
+  background: rgba(27, 45, 64, 0.96);
+  transform: none;
+}
+
+.itemDanger {
+  color: #ffd0d0;
+  border-color: rgba(255, 130, 130, 0.42);
+}
+
+.itemDanger:hover:not(:disabled),
+.itemDanger.itemActive {
+  border-color: rgba(255, 148, 148, 0.8);
+  background: rgba(63, 30, 34, 0.96);
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.description {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #8ea1b7;
+}

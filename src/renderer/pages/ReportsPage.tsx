@@ -102,6 +102,7 @@ export function ReportsPage() {
                             onRename={openRenameDialog}
                             onDelete={openDeleteDialog}
                             onExportHtml={() => void handleExport("html")}
+                            onExportCsv={() => void handleExport("csv")}
                             onExportXlsx={() => void handleExport("xlsx")}
                         />
                         <div className={styles.detailBody}>

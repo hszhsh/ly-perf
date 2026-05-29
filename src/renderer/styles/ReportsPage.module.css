@@ -112,6 +112,33 @@
   flex-wrap: wrap;
 }
 
+.detailActions {
+  align-items: flex-start;
+}
+
+.exportMenuTrigger {
+  min-width: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exportMenuTriggerOpen {
+  border-color: rgba(123, 173, 215, 0.8);
+  box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.1);
+}
+
+.exportMenuArrow {
+  color: #8fa5bd;
+  font-size: 10px;
+  transition: transform 0.18s ease;
+}
+
+.exportMenuArrowOpen {
+  transform: rotate(180deg);
+}
+
 .statusMessage,
 .exportResult,
 .errorMessage {

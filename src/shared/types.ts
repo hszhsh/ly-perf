@@ -291,7 +291,7 @@ export interface SessionDetail extends SessionSummary {
 }
 
 export interface ExportResult {
-    format: "html" | "xlsx";
+    format: "html" | "xlsx" | "csv";
     outputPath: string;
 }
 
@@ -343,6 +343,7 @@ export interface LyPerfApi {
     deleteSession: (sessionId: string) => Promise<void>;
     exportSession: (
         sessionId: string,
-        format: "html" | "xlsx"
+        format: "html" | "xlsx" | "csv"
     ) => Promise<ExportResult>;
+    openExportDirectory: (outputPath: string) => Promise<void>;
 }
