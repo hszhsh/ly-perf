@@ -134,6 +134,10 @@ export function ReportsChartsPanel({
         () => new Map(customChartStatsCards.map((card) => [card.chartId, card])),
         [customChartStatsCards]
     );
+    const loadChartSeries = useMemo(
+        () => getLoadChartSeries(sessionDetail.config.cpuMode),
+        [sessionDetail.config.cpuMode]
+    );
     const sharedTimeDomain = useMemo(
         () =>
             getChartTimeDomain(
@@ -237,7 +241,7 @@ export function ReportsChartsPanel({
                         onVisibleTimeRangeChange={requestVisibleTimeRange}
                         onSampleFocus={onSampleFocus}
                         onVisibleRangeChange={onLoadChartRangeChange}
-                        series={getLoadChartSeries(sessionDetail.config.cpuMode)}
+                        series={loadChartSeries}
                     />
 
                     <div className={styles.metricStatsPanel}>

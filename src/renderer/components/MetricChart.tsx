@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ECharts } from "echarts";
 import type {
     MonitorSample,
@@ -8,10 +8,6 @@ import { getTimelineEventTypeLabel } from "@renderer/components/timelineEventPre
 import { loadEcharts } from "@renderer/utils/loadEcharts";
 import { getUiLayerCssValue } from "@renderer/utils/uiLayers";
 
-const CHART_HEIGHT_PX = 280;
-const CHART_TOOLTIP_MARGIN_PX = 8;
-const CHART_TOOLTIP_MAX_HEIGHT_PX =
-    CHART_HEIGHT_PX - CHART_TOOLTIP_MARGIN_PX * 2;
 const CHART_TOOLTIP_EXTRA_CSS_TEXT = `z-index:${getUiLayerCssValue("tooltip")};box-shadow:none;`;
 
 export interface TimestampedSample {
@@ -38,10 +34,6 @@ export interface ChartRangeRequest {
     id: number;
     startTimestamp: number;
     endTimestamp: number;
-}
-
-function hasPositiveTimeSpan(range: ChartTimeDomain): boolean {
-    return range.endTimestamp > range.startTimestamp;
 }
 
 interface MetricChartProps<TSample extends TimestampedSample = MonitorSample> {
@@ -146,7 +138,7 @@ function normalizeTooltipColor(color: unknown): string {
 }
 
 function renderTooltipSurface(content: string): string {
-    return `<div style="min-width:260px;max-width:340px;max-height:${CHART_TOOLTIP_MAX_HEIGHT_PX}px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;box-sizing:border-box;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
+    return `<div style="min-width:260px;max-width:340px;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
 }
 
 function renderTooltipColorDot(color: string, size = 10): string {
@@ -434,8 +426,6 @@ function buildTimelineMarkerData(
     let lane = 0;
 
     return events.map((event) => {
-        const eventText = event.text.trim() || (event.type === "screenshot" ? "截图" : "");
-
         if (event.timestamp - previousTimestamp <= clusterThreshold) {
             lane = (lane + 1) % 4;
         } else {
@@ -451,10 +441,10 @@ function buildTimelineMarkerData(
             id: event.id,
             xAxis: event.timestamp,
             eventText:
-                eventText.length > 18
-                    ? `${eventText.slice(0, 18)}...`
-                    : eventText,
-            eventFullText: eventText,
+                event.text.length > 18
+                    ? `${event.text.slice(0, 18)}...`
+                    : event.text,
+            eventFullText: event.text,
             eventColor: event.color,
             eventTypeLabel: getTimelineEventTypeLabel(event.type),
             eventTimeLabel: formatTooltipTimestamp(event.timestamp),
@@ -557,9 +547,7 @@ function formatAxisTooltip(
                             eventTimeLabel: formatTooltipTimestamp(
                                 event.timestamp
                             ),
-                            eventFullText:
-                                event.text.trim() ||
-                                (event.type === "screenshot" ? "截图" : ""),
+                            eventFullText: event.text,
                             eventSampleLabel: getEventSampleLabel(
                                 samples,
                                 event.timestamp
@@ -820,6 +808,7 @@ export function getChartTimeDomain(
 export function MetricChart<TSample extends TimestampedSample>(
     props: MetricChartProps<TSample>
 ) {
+    const RANGE_SYNC_DEBOUNCE_MS = 180;
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<HTMLDivElement | null>(null);
     const instanceRef = useRef<ECharts | null>(null);
@@ -828,13 +817,39 @@ export function MetricChart<TSample extends TimestampedSample>(
         expiresAt: number;
     } | null>(null);
     const suppressedTimeRangeRef = useRef<ChartTimeDomain | null>(null);
+    const pendingTimeRangeRef = useRef<ChartTimeDomain | null>(null);
+    const rangeSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null
+    );
     const lastEmittedTimeRangeRef = useRef<ChartTimeDomain | null>(null);
+    const onAddEventAtTimestampRef = useRef(props.onAddEventAtTimestamp);
+    const onSampleFocusRef = useRef(props.onSampleFocus);
+    const onTimestampFocusRef = useRef(props.onTimestampFocus);
+    const onVisibleRangeChangeRef = useRef(props.onVisibleRangeChange);
+    const onVisibleTimeRangeChangeRef = useRef(props.onVisibleTimeRangeChange);
     const [runtimeState, setRuntimeState] = useState<
         "loading" | "ready" | "error"
     >("loading");
-    const normalizedTimeDomain = normalizeChartTimeDomain(props.timeDomain);
+    const normalizedTimeDomain = useMemo(
+        () => normalizeChartTimeDomain(props.timeDomain),
+        [props.timeDomain?.startTimestamp, props.timeDomain?.endTimestamp]
+    );
 
-    const positionAxisTooltip = (
+    useEffect(() => {
+        onAddEventAtTimestampRef.current = props.onAddEventAtTimestamp;
+        onSampleFocusRef.current = props.onSampleFocus;
+        onTimestampFocusRef.current = props.onTimestampFocus;
+        onVisibleRangeChangeRef.current = props.onVisibleRangeChange;
+        onVisibleTimeRangeChangeRef.current = props.onVisibleTimeRangeChange;
+    }, [
+        props.onAddEventAtTimestamp,
+        props.onSampleFocus,
+        props.onTimestampFocus,
+        props.onVisibleRangeChange,
+        props.onVisibleTimeRangeChange
+    ]);
+
+    const positionAxisTooltip = useCallback((
         point: number | number[],
         params: unknown,
         dom: HTMLElement,
@@ -855,7 +870,7 @@ export function MetricChart<TSample extends TimestampedSample>(
             : typeof axisPixel === "number"
               ? axisPixel
               : null;
-        const fallbackPoint = Array.isArray(point)
+                const fallbackPoint = Array.isArray(point)
             ? point[0]
             : typeof point === "number"
               ? point
@@ -866,7 +881,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                                 : fallbackPoint !== null && Number.isFinite(fallbackPoint)
                                     ? fallbackPoint
                                     : viewWidth / 2;
-        const margin = CHART_TOOLTIP_MARGIN_PX;
+        const margin = 8;
         const gap = 14;
         const preferredLeft = anchorX + gap;
         const flippedLeft = anchorX - contentWidth - gap;
@@ -880,9 +895,8 @@ export function MetricChart<TSample extends TimestampedSample>(
                     : flippedLeft
             )
         );
-
         return [Math.round(left), margin];
-    };
+    }, []);
 
     const option = useMemo(() => {
         const timelineEvents = props.events ?? [];
@@ -1059,31 +1073,10 @@ export function MetricChart<TSample extends TimestampedSample>(
 
                 chart.setOption(option);
 
-                const notifyVisibleRange = () => {
-                    const timeRange = getVisibleTimeRange(
-                        chart,
-                        props.samples,
-                        normalizedTimeDomain
-                    );
-                    const range = getVisibleSampleRange(
-                        chart,
-                        props.samples,
-                        normalizedTimeDomain
-                    );
-                    props.onVisibleRangeChange?.(
-                        range.startIndex,
-                        range.endIndex
-                    );
-
-                    const normalizedRange = {
-                        startTimestamp: Math.floor(timeRange.startTimestamp),
-                        endTimestamp: Math.ceil(timeRange.endTimestamp)
-                    } satisfies ChartTimeDomain;
-
-                    if (!hasPositiveTimeSpan(normalizedRange)) {
-                        return;
-                    }
-
+                const emitVisibleTimeRange = (
+                    normalizedRange: ChartTimeDomain,
+                    immediate = false
+                ) => {
                     const suppressedRange = suppressedTimeRangeRef.current;
 
                     if (
@@ -1098,6 +1091,13 @@ export function MetricChart<TSample extends TimestampedSample>(
                         ) <= 1
                     ) {
                         suppressedTimeRangeRef.current = null;
+                        pendingTimeRangeRef.current = null;
+
+                        if (rangeSyncTimeoutRef.current) {
+                            clearTimeout(rangeSyncTimeoutRef.current);
+                            rangeSyncTimeoutRef.current = null;
+                        }
+
                         lastEmittedTimeRangeRef.current = normalizedRange;
                         return;
                     }
@@ -1112,8 +1112,77 @@ export function MetricChart<TSample extends TimestampedSample>(
                         return;
                     }
 
-                    lastEmittedTimeRangeRef.current = normalizedRange;
-                    props.onVisibleTimeRangeChange?.(normalizedRange);
+                    if (immediate) {
+                        if (rangeSyncTimeoutRef.current) {
+                            clearTimeout(rangeSyncTimeoutRef.current);
+                            rangeSyncTimeoutRef.current = null;
+                        }
+
+                        pendingTimeRangeRef.current = null;
+                        lastEmittedTimeRangeRef.current = normalizedRange;
+                        onVisibleTimeRangeChangeRef.current?.(normalizedRange);
+                        return;
+                    }
+
+                    pendingTimeRangeRef.current = normalizedRange;
+
+                    if (rangeSyncTimeoutRef.current) {
+                        clearTimeout(rangeSyncTimeoutRef.current);
+                    }
+
+                    rangeSyncTimeoutRef.current = setTimeout(() => {
+                        rangeSyncTimeoutRef.current = null;
+                        const pendingRange = pendingTimeRangeRef.current;
+
+                        if (!pendingRange) {
+                            return;
+                        }
+
+                        const currentEmittedRange = lastEmittedTimeRangeRef.current;
+                        if (
+                            currentEmittedRange &&
+                            currentEmittedRange.startTimestamp ===
+                                pendingRange.startTimestamp &&
+                            currentEmittedRange.endTimestamp ===
+                                pendingRange.endTimestamp
+                        ) {
+                            pendingTimeRangeRef.current = null;
+                            return;
+                        }
+
+                        lastEmittedTimeRangeRef.current = pendingRange;
+                        pendingTimeRangeRef.current = null;
+                        onVisibleTimeRangeChangeRef.current?.(pendingRange);
+                    }, RANGE_SYNC_DEBOUNCE_MS);
+                };
+                const notifyVisibleRange = (syncImmediately = false) => {
+                    const timeRange = getVisibleTimeRange(
+                        chart,
+                        props.samples,
+                        normalizedTimeDomain
+                    );
+                    if (timeRange.endTimestamp <= timeRange.startTimestamp) {
+                        return;
+                    }
+
+                    const range = getVisibleSampleRange(
+                        chart,
+                        props.samples,
+                        normalizedTimeDomain
+                    );
+                    onVisibleRangeChangeRef.current?.(
+                        range.startIndex,
+                        range.endIndex
+                    );
+
+                    const normalizedRange = {
+                        startTimestamp: Math.floor(timeRange.startTimestamp),
+                        endTimestamp: Math.ceil(timeRange.endTimestamp)
+                    } satisfies ChartTimeDomain;
+                    emitVisibleTimeRange(normalizedRange, syncImmediately);
+                };
+                const handleDataZoom = () => {
+                    notifyVisibleRange(false);
                 };
                 const handleAxisPointerUpdate = (event: unknown) => {
                     const axisInfo = (
@@ -1149,7 +1218,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                         return;
                     }
 
-                    props.onTimestampFocus?.(Math.floor(timestamp));
+                    onTimestampFocusRef.current?.(Math.floor(timestamp));
 
                     const sampleIndex = findNearestSampleIndex(
                         props.samples,
@@ -1164,7 +1233,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                         return;
                     }
 
-                    props.onSampleFocus?.(sampleIndex);
+                    onSampleFocusRef.current?.(sampleIndex);
                 };
                 const handleChartClick = (event: unknown) => {
                     const componentType = (event as { componentType?: string })
@@ -1183,16 +1252,19 @@ export function MetricChart<TSample extends TimestampedSample>(
                     );
 
                     if (sampleIndex >= 0) {
-                        props.onSampleFocus?.(sampleIndex);
+                        onSampleFocusRef.current?.(sampleIndex);
                     }
 
                     if (componentType === "markLine") {
                         return;
                     }
 
-                    props.onAddEventAtTimestamp?.(timestamp);
+                    onAddEventAtTimestampRef.current?.(timestamp);
                 };
-                const resizeChart = () => {
+                const resizeChart = (
+                    width?: number,
+                    height?: number
+                ) => {
                     const wrapper = wrapperRef.current;
 
                     if (!wrapper) {
@@ -1201,19 +1273,27 @@ export function MetricChart<TSample extends TimestampedSample>(
                     }
 
                     chart.resize({
-                        width: wrapper.clientWidth,
-                        height: wrapper.clientHeight
+                        width: width ?? wrapper.clientWidth,
+                        height: height ?? wrapper.clientHeight
                     });
                 };
-                const onResize = () => resizeChart();
                 const resizeObserver =
                     typeof ResizeObserver === "undefined"
                         ? null
-                        : new ResizeObserver(() => {
-                              resizeChart();
+                        : new ResizeObserver((entries) => {
+                              const entry = entries[0];
+
+                              if (!entry) {
+                                  resizeChart();
+                                  return;
+                              }
+
+                              resizeChart(
+                                  Math.floor(entry.contentRect.width),
+                                  Math.floor(entry.contentRect.height)
+                              );
                           });
 
-                notifyVisibleRange();
                 resizeChart();
 
                 const wrapper = wrapperRef.current;
@@ -1224,14 +1304,12 @@ export function MetricChart<TSample extends TimestampedSample>(
 
                 chart.on("updateAxisPointer", handleAxisPointerUpdate);
                 chart.on("click", handleChartClick);
-                chart.on("datazoom", notifyVisibleRange);
-                window.addEventListener("resize", onResize);
+                chart.on("datazoom", handleDataZoom);
 
                 cleanup = () => {
                     chart.off("updateAxisPointer", handleAxisPointerUpdate);
                     chart.off("click", handleChartClick);
-                    chart.off("datazoom", notifyVisibleRange);
-                    window.removeEventListener("resize", onResize);
+                    chart.off("datazoom", handleDataZoom);
                     resizeObserver?.disconnect();
                 };
 
@@ -1250,11 +1328,6 @@ export function MetricChart<TSample extends TimestampedSample>(
     }, [
         option,
         normalizedTimeDomain,
-        props.onAddEventAtTimestamp,
-        props.onSampleFocus,
-        props.onTimestampFocus,
-        props.onVisibleRangeChange,
-        props.onVisibleTimeRangeChange,
         props.samples
     ]);
 
@@ -1310,7 +1383,7 @@ export function MetricChart<TSample extends TimestampedSample>(
             endTimestamp: Math.ceil(props.rangeRequest.endTimestamp)
         } satisfies ChartTimeDomain;
 
-        if (!hasPositiveTimeSpan(requestedRange)) {
+        if (requestedRange.endTimestamp <= requestedRange.startTimestamp) {
             return;
         }
 
@@ -1340,6 +1413,11 @@ export function MetricChart<TSample extends TimestampedSample>(
 
     useEffect(() => {
         return () => {
+            if (rangeSyncTimeoutRef.current) {
+                clearTimeout(rangeSyncTimeoutRef.current);
+                rangeSyncTimeoutRef.current = null;
+            }
+
             instanceRef.current?.dispose();
             instanceRef.current = null;
         };
@@ -1399,16 +1477,15 @@ export function MetricChart<TSample extends TimestampedSample>(
                 position: "relative",
                 width: "100%",
                 minWidth: 0,
-                height: `${CHART_HEIGHT_PX}px`,
-                overflow: "hidden"
+                height: "280px"
             }}
         >
             <div
                 ref={chartRef}
                 style={{
-                    width: "100%",
+                    position: "absolute",
+                    inset: 0,
                     minWidth: 0,
-                    height: "100%",
                     opacity: runtimeState === "ready" ? 1 : 0
                 }}
             />

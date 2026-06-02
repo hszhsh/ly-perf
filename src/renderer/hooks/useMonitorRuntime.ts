@@ -373,6 +373,14 @@ export function useMonitorRuntime(
     async function handleStop(): Promise<void> {
         const state = await window.lyPerf.stopMonitor();
         setMonitorState(state);
+        setSamples([]);
+        setCustomMetricDefinitions([]);
+        setCustomChartDefinitions([]);
+        setCustomSamples([]);
+        setSessionEvents([]);
+        setFpsDebug(null);
+        setCapabilityReport(null);
+        setEventErrorMessage("");
     }
 
     function clearEventError(): void {

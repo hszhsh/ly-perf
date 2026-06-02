@@ -82,6 +82,7 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
         ? (monitorState.config?.cpuMode ?? cpuMode)
         : cpuMode;
     const latestMetrics = samples[samples.length - 1]?.metrics;
+    const monitorSessionKey = monitorState.sessionId ?? "idle";
 
     useEffect(() => {
         onMonitorBusyChange?.(isStarting || monitorState.running);
@@ -135,6 +136,7 @@ export function MonitorPage({ onMonitorBusyChange }: MonitorPageProps) {
 
             <div className={styles.content}>
                 <MonitorChartsPanel
+                    key={monitorSessionKey}
                     samples={samples}
                     activeCpuMode={activeCpuMode}
                     customMetricDefinitions={customMetricDefinitions}

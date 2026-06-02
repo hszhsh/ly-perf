@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
     CpuUsageMode,
     DeepMonitorChartDefinition,
@@ -108,6 +108,10 @@ export function MonitorChartsPanel({
     const sortedCustomCharts = getSortedCustomChartDefinitions(
         customChartDefinitions
     );
+    const loadChartSeries = useMemo(
+        () => getLoadChartSeries(activeCpuMode),
+        [activeCpuMode]
+    );
     const sharedTimeDomain = getChartTimeDomain(
         samples,
         sortedCustomSamples,
@@ -126,6 +130,10 @@ export function MonitorChartsPanel({
     function requestVisibleTimeRange(range: ChartTimeDomain): void {
         const startTimestamp = Math.floor(range.startTimestamp);
         const endTimestamp = Math.ceil(range.endTimestamp);
+
+        if (endTimestamp <= startTimestamp) {
+            return;
+        }
 
         setRangeRequest((current) => {
             if (
@@ -193,7 +201,7 @@ export function MonitorChartsPanel({
                     onAddEventAtTimestamp={
                         editableEvents ? setRequestedCreateTimestamp : undefined
                     }
-                    series={getLoadChartSeries(activeCpuMode)}
+                    series={loadChartSeries}
                 />
 
                 <MetricChart

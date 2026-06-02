@@ -268,7 +268,8 @@
   display: grid;
   gap: 10px;
   align-content: start;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   min-width: 0;
 }
 
