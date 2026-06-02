@@ -1,10 +1,12 @@
 import type { MetricCapabilityReport } from "@shared/types";
+import type { NetworkInterfaceSnapshot } from "@main/services/MetricCollectorIo";
 
 export interface CounterSnapshot {
     timestamp: number;
     rxBytes: number;
     txBytes: number;
     networkTotalBytes: number;
+    networkInterfaces: Record<string, NetworkInterfaceSnapshot>;
     readBytes: number;
     writeBytes: number;
     cpuTotalTicks: number | null;

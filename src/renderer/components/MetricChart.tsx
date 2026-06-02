@@ -8,6 +8,10 @@ import { getTimelineEventTypeLabel } from "@renderer/components/timelineEventPre
 import { loadEcharts } from "@renderer/utils/loadEcharts";
 import { getUiLayerCssValue } from "@renderer/utils/uiLayers";
 
+const CHART_HEIGHT_PX = 280;
+const CHART_TOOLTIP_MARGIN_PX = 8;
+const CHART_TOOLTIP_MAX_HEIGHT_PX =
+    CHART_HEIGHT_PX - CHART_TOOLTIP_MARGIN_PX * 2;
 const CHART_TOOLTIP_EXTRA_CSS_TEXT = `z-index:${getUiLayerCssValue("tooltip")};box-shadow:none;`;
 
 export interface TimestampedSample {
@@ -142,7 +146,7 @@ function normalizeTooltipColor(color: unknown): string {
 }
 
 function renderTooltipSurface(content: string): string {
-    return `<div style="min-width:260px;max-width:340px;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
+    return `<div style="min-width:260px;max-width:340px;max-height:${CHART_TOOLTIP_MAX_HEIGHT_PX}px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;box-sizing:border-box;padding:14px 14px 12px;border:1px solid rgba(121, 151, 181, 0.28);border-radius:12px;background:linear-gradient(180deg, rgba(18, 28, 42, 0.98), rgba(8, 14, 23, 0.96));box-shadow:0 16px 42px rgba(0, 0, 0, 0.34);backdrop-filter:blur(8px);">${content}</div>`;
 }
 
 function renderTooltipColorDot(color: string, size = 10): string {
@@ -862,7 +866,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                                 : fallbackPoint !== null && Number.isFinite(fallbackPoint)
                                     ? fallbackPoint
                                     : viewWidth / 2;
-        const margin = 8;
+        const margin = CHART_TOOLTIP_MARGIN_PX;
         const gap = 14;
         const preferredLeft = anchorX + gap;
         const flippedLeft = anchorX - contentWidth - gap;
@@ -1395,7 +1399,7 @@ export function MetricChart<TSample extends TimestampedSample>(
                 position: "relative",
                 width: "100%",
                 minWidth: 0,
-                height: "280px",
+                height: `${CHART_HEIGHT_PX}px`,
                 overflow: "hidden"
             }}
         >

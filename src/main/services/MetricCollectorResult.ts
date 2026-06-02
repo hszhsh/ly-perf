@@ -34,6 +34,7 @@ export function buildCounterSnapshot(params: {
         rxBytes: params.networkSnapshot.rxBytes,
         txBytes: params.networkSnapshot.txBytes,
         networkTotalBytes: params.networkSnapshot.totalBytes,
+        networkInterfaces: params.networkSnapshot.interfaces,
         readBytes: params.diskSnapshot.readBytes,
         writeBytes: params.diskSnapshot.writeBytes,
         cpuTotalTicks: params.cpuResult.cpuTotalTicks,
