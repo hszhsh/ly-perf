@@ -87,11 +87,7 @@ export function ModalDialog(props: ModalDialogProps) {
             >
                 <div
                     ref={dialogRef}
-                    className={
-                        dialogClassName
-                            ? `${styles.dialog} ${dialogClassName}`
-                            : styles.dialog
-                    }
+                    className={`${styles.dialog} ${dialogClassName ?? ""}`.trim()}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby={titleId}
@@ -127,11 +123,7 @@ export function ModalDialog(props: ModalDialogProps) {
 
                     {children ? (
                         <div
-                            className={
-                                bodyClassName
-                                    ? `${styles.body} ${bodyClassName}`
-                                    : styles.body
-                            }
+                            className={`${styles.body} ${bodyClassName ?? ""}`.trim()}
                         >
                             {children}
                         </div>

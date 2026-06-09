@@ -16,7 +16,7 @@ const config: Configuration = {
         path: path.resolve(__dirname, ".rspack/renderer"),
         filename: "[name].js",
         chunkFilename: isDev ? "[name].chunk.js" : "[name].[contenthash:8].js",
-        publicPath: "/"
+        publicPath: isDev ? "/" : "./"
     },
     resolve: {
         alias: {

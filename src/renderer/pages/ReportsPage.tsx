@@ -49,8 +49,7 @@ export function ReportsPage() {
         screenshotSampleIndexes,
         selectedScreenshotPosition,
         selectedScreenshotSample,
-        selectedScreenshotUrl,
-        isScreenshotLoading,
+        screenshotPreviewItems,
         handleChartSampleFocus,
         handleChartTimestampFocus,
         jumpScreenshot
@@ -145,8 +144,9 @@ export function ReportsPage() {
                                     selectedScreenshotPosition
                                 }
                                 screenshotCount={screenshotSampleIndexes.length}
-                                selectedScreenshotUrl={selectedScreenshotUrl}
-                                isScreenshotLoading={isScreenshotLoading}
+                                screenshotPreviewItems={
+                                    screenshotPreviewItems
+                                }
                                 onPreviousScreenshot={() => jumpScreenshot(-1)}
                                 onNextScreenshot={() => jumpScreenshot(1)}
                             />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionDetail } from "@shared/types";
 
 function findNearestIndex(indexes: number[], target: number): number {
@@ -42,11 +42,22 @@ interface UseReportsScreenshotsResult {
     screenshotSampleIndexes: number[];
     selectedScreenshotPosition: number;
     selectedScreenshotSample: SessionDetail["samples"][number] | null;
-    selectedScreenshotUrl: string;
-    isScreenshotLoading: boolean;
+    screenshotPreviewItems: [
+        ScreenshotPreviewItem,
+        ScreenshotPreviewItem,
+        ScreenshotPreviewItem
+    ];
     handleChartSampleFocus: (sampleIndex: number) => void;
     handleChartTimestampFocus: (timestamp: number) => void;
     jumpScreenshot: (offset: -1 | 1) => void;
+}
+
+export interface ScreenshotPreviewItem {
+    kind: "previous" | "current" | "next";
+    sample: SessionDetail["samples"][number] | null;
+    position: number;
+    url: string;
+    isLoading: boolean;
 }
 
 function findNearestSampleIndexByTimestamp(
@@ -96,8 +107,13 @@ export function useReportsScreenshots(
 ): UseReportsScreenshotsResult {
     const [selectedScreenshotPosition, setSelectedScreenshotPosition] =
         useState(-1);
-    const [selectedScreenshotUrl, setSelectedScreenshotUrl] = useState("");
-    const [isScreenshotLoading, setIsScreenshotLoading] = useState(false);
+    const [screenshotDataUrlByPath, setScreenshotDataUrlByPath] = useState<
+        Record<string, string>
+    >({});
+    const [loadingScreenshotPaths, setLoadingScreenshotPaths] = useState<
+        Record<string, boolean>
+    >({});
+    const isUnmountedRef = useRef(false);
 
     const screenshotSampleIndexes = useMemo(() => {
         if (!sessionDetail) {
@@ -124,6 +140,28 @@ export function useReportsScreenshots(
         selectedScreenshotSampleIndex !== null && sessionDetail
             ? (sessionDetail.samples[selectedScreenshotSampleIndex] ?? null)
             : null;
+    const previousScreenshotSample =
+        selectedScreenshotPosition > 0 && sessionDetail
+            ? (sessionDetail.samples[
+                  screenshotSampleIndexes[selectedScreenshotPosition - 1] ?? -1
+              ] ?? null)
+            : null;
+    const nextScreenshotSample =
+        selectedScreenshotPosition >= 0 &&
+        selectedScreenshotPosition < screenshotSampleIndexes.length - 1 &&
+        sessionDetail
+            ? (sessionDetail.samples[
+                  screenshotSampleIndexes[selectedScreenshotPosition + 1] ?? -1
+              ] ?? null)
+            : null;
+
+    useEffect(() => {
+        isUnmountedRef.current = false;
+
+        return () => {
+            isUnmountedRef.current = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (screenshotSampleIndexes.length === 0) {
@@ -135,39 +173,116 @@ export function useReportsScreenshots(
     }, [screenshotSampleIndexes]);
 
     useEffect(() => {
-        let disposed = false;
-        const screenshotPath = selectedScreenshotSample?.screenshotPath;
+        const screenshotPaths = [
+            previousScreenshotSample?.screenshotPath ?? "",
+            selectedScreenshotSample?.screenshotPath ?? "",
+            nextScreenshotSample?.screenshotPath ?? ""
+        ].filter((value) => value.length > 0);
 
-        if (!screenshotPath) {
-            setSelectedScreenshotUrl("");
-            setIsScreenshotLoading(false);
-            return () => {
-                disposed = true;
-            };
+        if (screenshotPaths.length === 0) {
+            return;
         }
 
-        setIsScreenshotLoading(true);
-
-        void (async () => {
-            try {
-                const dataUrl =
-                    await window.lyPerf.readScreenshotDataUrl(screenshotPath);
-                if (!disposed) {
-                    setSelectedScreenshotUrl(dataUrl ?? "");
-                    setIsScreenshotLoading(false);
-                }
-            } catch {
-                if (!disposed) {
-                    setSelectedScreenshotUrl("");
-                    setIsScreenshotLoading(false);
-                }
+        for (const screenshotPath of screenshotPaths) {
+            if (screenshotDataUrlByPath[screenshotPath]) {
+                continue;
             }
-        })();
 
-        return () => {
-            disposed = true;
-        };
-    }, [selectedScreenshotSample]);
+            if (loadingScreenshotPaths[screenshotPath]) {
+                continue;
+            }
+
+            setLoadingScreenshotPaths((current) => ({
+                ...current,
+                [screenshotPath]: true
+            }));
+
+            void (async () => {
+                try {
+                    const dataUrl =
+                        await window.lyPerf.readScreenshotDataUrl(screenshotPath);
+
+                    if (isUnmountedRef.current) {
+                        return;
+                    }
+
+                    setScreenshotDataUrlByPath((current) => ({
+                        ...current,
+                        [screenshotPath]: dataUrl ?? ""
+                    }));
+                } catch {
+                    if (isUnmountedRef.current) {
+                        return;
+                    }
+
+                    setScreenshotDataUrlByPath((current) => ({
+                        ...current,
+                        [screenshotPath]: ""
+                    }));
+                } finally {
+                    if (isUnmountedRef.current) {
+                        return;
+                    }
+
+                    setLoadingScreenshotPaths((current) => ({
+                        ...current,
+                        [screenshotPath]: false
+                    }));
+                }
+            })();
+        }
+    }, [
+        loadingScreenshotPaths,
+        nextScreenshotSample,
+        previousScreenshotSample,
+        screenshotDataUrlByPath,
+        selectedScreenshotSample
+    ]);
+
+    const screenshotPreviewItems = useMemo<
+        [ScreenshotPreviewItem, ScreenshotPreviewItem, ScreenshotPreviewItem]
+    >(() => {
+        const previousPath = previousScreenshotSample?.screenshotPath ?? "";
+        const currentPath = selectedScreenshotSample?.screenshotPath ?? "";
+        const nextPath = nextScreenshotSample?.screenshotPath ?? "";
+
+        return [
+            {
+                kind: "previous",
+                sample: previousScreenshotSample,
+                position: selectedScreenshotPosition - 1,
+                url: previousPath ? (screenshotDataUrlByPath[previousPath] ?? "") : "",
+                isLoading: previousPath
+                    ? Boolean(loadingScreenshotPaths[previousPath])
+                    : false
+            },
+            {
+                kind: "current",
+                sample: selectedScreenshotSample,
+                position: selectedScreenshotPosition,
+                url: currentPath ? (screenshotDataUrlByPath[currentPath] ?? "") : "",
+                isLoading: currentPath
+                    ? Boolean(loadingScreenshotPaths[currentPath])
+                    : false
+            },
+            {
+                kind: "next",
+                sample: nextScreenshotSample,
+                position: selectedScreenshotPosition + 1,
+                url: nextPath ? (screenshotDataUrlByPath[nextPath] ?? "") : "",
+                isLoading: nextPath
+                    ? Boolean(loadingScreenshotPaths[nextPath])
+                    : false
+            }
+        ];
+    }, [
+        loadingScreenshotPaths,
+        nextScreenshotSample,
+        previousScreenshotSample,
+        screenshotDataUrlByPath,
+        selectedScreenshotPosition,
+        selectedScreenshotSample
+    ]);
 
     const handleChartSampleFocus = useCallback((sampleIndex: number): void => {
         if (screenshotSampleIndexes.length === 0) {
@@ -223,8 +338,7 @@ export function useReportsScreenshots(
         screenshotSampleIndexes,
         selectedScreenshotPosition,
         selectedScreenshotSample,
-        selectedScreenshotUrl,
-        isScreenshotLoading,
+        screenshotPreviewItems,
         handleChartSampleFocus,
         handleChartTimestampFocus,
         jumpScreenshot

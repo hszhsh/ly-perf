@@ -1,23 +1,55 @@
 import type { SessionDetail } from "@shared/types";
 import { formatDateTime } from "@renderer/utils/formatters";
+import type { ScreenshotPreviewItem } from "@renderer/hooks/useReportsScreenshots";
 import styles from "@renderer/styles/ReportsPage.module.css";
 
 interface ReportsScreenshotPreviewProps {
     selectedScreenshotSample: SessionDetail["samples"][number] | null;
     selectedScreenshotPosition: number;
     screenshotCount: number;
-    selectedScreenshotUrl: string;
-    isScreenshotLoading: boolean;
+    screenshotPreviewItems: [
+        ScreenshotPreviewItem,
+        ScreenshotPreviewItem,
+        ScreenshotPreviewItem
+    ];
     onPreviousScreenshot: () => void;
     onNextScreenshot: () => void;
+}
+
+function renderPreviewSlot(
+    item: ScreenshotPreviewItem,
+    screenshotCount: number
+) {
+    if (!item.sample) {
+        return <p className={styles.previewSlotPlaceholder}>无截图</p>;
+    }
+
+    if (item.url) {
+        return (
+            <img
+                className={styles.previewImage}
+                src={item.url}
+                alt={`session screenshot at ${formatDateTime(item.sample.timestamp)}`}
+            />
+        );
+    }
+
+    if (item.isLoading) {
+        return <p className={styles.previewSlotPlaceholder}>截图加载中...</p>;
+    }
+
+    return (
+        <p className={styles.previewSlotPlaceholder}>
+            第 {item.position + 1} / {screenshotCount} 张截图加载失败
+        </p>
+    );
 }
 
 export function ReportsScreenshotPreview({
     selectedScreenshotSample,
     selectedScreenshotPosition,
     screenshotCount,
-    selectedScreenshotUrl,
-    isScreenshotLoading,
+    screenshotPreviewItems,
     onPreviousScreenshot,
     onNextScreenshot
 }: ReportsScreenshotPreviewProps) {
@@ -63,19 +95,20 @@ export function ReportsScreenshotPreview({
                         </div>
                     </div>
 
-                    {selectedScreenshotUrl ? (
-                        <img
-                            className={styles.previewImage}
-                            src={selectedScreenshotUrl}
-                            alt={`session screenshot at ${formatDateTime(selectedScreenshotSample.timestamp)}`}
-                        />
-                    ) : isScreenshotLoading ? (
-                        <p className={styles.empty}>截图加载中...</p>
-                    ) : (
-                        <p className={styles.empty}>
-                            截图加载失败，文件可能已不存在或不可访问。
-                        </p>
-                    )}
+                    <div className={styles.previewMediaRow}>
+                        {screenshotPreviewItems.map((item) => (
+                            <div
+                                key={`${item.kind}-${item.sample?.timestamp ?? "none"}`}
+                                className={
+                                    item.kind === "current"
+                                        ? styles.previewMediaCurrent
+                                        : styles.previewMediaSide
+                                }
+                            >
+                                {renderPreviewSlot(item, screenshotCount)}
+                            </div>
+                        ))}
+                    </div>
                 </>
             ) : (
                 <p className={styles.empty}>

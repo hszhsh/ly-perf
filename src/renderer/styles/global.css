@@ -10,8 +10,7 @@
   --accent: #4fc3f7;
   --layer-base: 0;
   --layer-raised: 10;
-  --layer-popover: 800;
-  --layer-dropdown: 800;
+  --layer-dropdown: 400;
   --layer-tooltip: 1200;
   --layer-toast: 1400;
   --layer-modal: 1600;
