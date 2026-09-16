@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from "@shared/ipc";
 import type {
     DeepMonitorSample,
     DeepMonitorSchemaRevision,
+    DeleteSessionsResult,
     ExportResult,
     LyPerfApi,
     MonitorConfig,
@@ -142,6 +143,11 @@ const api: LyPerfApi = {
             IPC_CHANNELS.deleteSession,
             sessionId
         ) as Promise<void>,
+    deleteSessions: (sessionIds: string[]) =>
+        ipcRenderer.invoke(
+            IPC_CHANNELS.deleteSessions,
+            sessionIds
+        ) as Promise<DeleteSessionsResult>,
     exportSession: (sessionId: string, format: "html" | "xlsx" | "csv") =>
         ipcRenderer.invoke(
             IPC_CHANNELS.exportSession,

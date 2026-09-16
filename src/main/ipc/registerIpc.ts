@@ -210,6 +210,12 @@ export function registerIpcHandlers(deps: RegisterIpcDependencies): void {
     );
 
     ipcMain.handle(
+        IPC_CHANNELS.deleteSessions,
+        async (_event, sessionIds: string[]) =>
+            deps.sessionStore.deleteSessions(sessionIds)
+    );
+
+    ipcMain.handle(
         IPC_CHANNELS.exportSession,
         async (_event, sessionId: string, format: "html" | "xlsx" | "csv") =>
             deps.reportService.exportSession(sessionId, format)

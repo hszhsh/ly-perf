@@ -9,11 +9,13 @@ import type {
 
 export type BusyAction =
     | "delete"
+    | "batch-delete"
     | "export-html"
     | "export-xlsx"
     | "export-csv"
     | "rename";
 export type EventBusyAction = "create" | "update" | "delete";
+export type SessionSelectionMode = "replace" | "toggle" | "range";
 
 export interface FeedbackState {
     id: number;
@@ -32,6 +34,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 interface UseReportsRuntimeResult {
     sessions: SessionSummary[];
     selectedSessionId: string;
+    selectedSessionIds: ReadonlySet<string>;
     sessionDetail: SessionDetail | null;
     exportResult: ExportResult | null;
     feedback: FeedbackState | null;
@@ -44,8 +47,12 @@ interface UseReportsRuntimeResult {
     renameDialogOpen: boolean;
     renameDialogError: string | null;
     deleteDialogOpen: boolean;
+    batchDeleteDialogOpen: boolean;
     reloadSessions: () => Promise<void>;
-    setSelectedSessionId: React.Dispatch<React.SetStateAction<string>>;
+    selectSession: (
+        sessionId: string,
+        mode: SessionSelectionMode
+    ) => void;
     handleExport: (format: "html" | "xlsx" | "csv") => Promise<void>;
     openRenameDialog: () => void;
     closeRenameDialog: () => void;
@@ -53,6 +60,10 @@ interface UseReportsRuntimeResult {
     openDeleteDialog: () => void;
     closeDeleteDialog: () => void;
     handleDelete: () => Promise<void>;
+    toggleAllSessionSelection: () => void;
+    openBatchDeleteDialog: () => void;
+    closeBatchDeleteDialog: () => void;
+    handleBatchDelete: () => Promise<void>;
     handleCreateEvent: (input: SessionTimelineEventInput) => Promise<boolean>;
     handleUpdateEvent: (input: SessionTimelineEventUpdate) => Promise<boolean>;
     handleDeleteEvent: (eventId: string) => Promise<boolean>;
@@ -61,6 +72,9 @@ interface UseReportsRuntimeResult {
 export function useReportsRuntime(): UseReportsRuntimeResult {
     const [sessions, setSessions] = useState<SessionSummary[]>([]);
     const [selectedSessionId, setSelectedSessionId] = useState("");
+    const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
+        () => new Set()
+    );
     const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(
         null
     );
@@ -78,6 +92,8 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         null
     );
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
+    const selectionAnchorIdRef = useRef<string | null>(null);
     const feedbackIdRef = useRef(0);
 
     function showFeedback(type: FeedbackState["type"], text: string): void {
@@ -95,13 +111,37 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         try {
             const list = await window.lyPerf.listSessions();
             setSessions(list);
+            const availableIds = new Set(list.map((session) => session.id));
+            const shouldSelectDefault =
+                !selectedSessionId || !availableIds.has(selectedSessionId);
+            const nextSelectedSessionId =
+                selectedSessionId && availableIds.has(selectedSessionId)
+                    ? selectedSessionId
+                    : list[0]?.id ?? "";
+            if (
+                selectionAnchorIdRef.current &&
+                !availableIds.has(selectionAnchorIdRef.current)
+            ) {
+                selectionAnchorIdRef.current = null;
+            }
+            setSelectedSessionIds((current) => {
+                const next = new Set(
+                    Array.from(current).filter((sessionId) =>
+                        availableIds.has(sessionId)
+                    )
+                );
+                if (next.size === 0 && shouldSelectDefault && nextSelectedSessionId) {
+                    next.add(nextSelectedSessionId);
+                }
+                return next;
+            });
 
             setSelectedSessionId((current) => {
                 if (current && list.some((item) => item.id === current)) {
                     return current;
                 }
 
-                return list[0]?.id ?? "";
+                return nextSelectedSessionId;
             });
         } catch (error) {
             showFeedback("error", getErrorMessage(error, "加载历史会话失败。"));
@@ -280,6 +320,11 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         try {
             await window.lyPerf.deleteSession(sessionDetail.id);
             setDeleteDialogOpen(false);
+            setSelectedSessionIds((current) => {
+                const next = new Set(current);
+                next.delete(sessionDetail.id);
+                return next;
+            });
             setSessionDetail(null);
             setExportResult(null);
             showFeedback("success", `已删除历史会话 ${sessionDetail.displayName}。`);
@@ -287,6 +332,137 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
             await reloadSessions();
         } catch (error) {
             showFeedback("error", getErrorMessage(error, "删除历史会话失败。"));
+        } finally {
+            setBusyAction(null);
+        }
+    }
+
+    function selectSession(
+        sessionId: string,
+        mode: SessionSelectionMode
+    ): void {
+        const sessionIndex = sessions.findIndex(
+            (session) => session.id === sessionId
+        );
+        if (sessionIndex < 0) {
+            return;
+        }
+
+        if (mode === "replace") {
+            setSelectedSessionIds(new Set([sessionId]));
+            selectionAnchorIdRef.current = sessionId;
+        } else if (mode === "toggle") {
+            setSelectedSessionIds((current) => {
+                const next = new Set(current);
+                if (next.has(sessionId)) {
+                    next.delete(sessionId);
+                } else {
+                    next.add(sessionId);
+                }
+                return next;
+            });
+            selectionAnchorIdRef.current = sessionId;
+        } else {
+            const anchorId =
+                selectionAnchorIdRef.current &&
+                sessions.some(
+                    (session) => session.id === selectionAnchorIdRef.current
+                )
+                    ? selectionAnchorIdRef.current
+                    : sessions.some((session) => session.id === selectedSessionId)
+                      ? selectedSessionId
+                      : sessionId;
+            const anchorIndex = sessions.findIndex(
+                (session) => session.id === anchorId
+            );
+            const start = Math.min(anchorIndex, sessionIndex);
+            const end = Math.max(anchorIndex, sessionIndex);
+            setSelectedSessionIds(
+                new Set(
+                    sessions
+                        .slice(start, end + 1)
+                        .map((session) => session.id)
+                )
+            );
+        }
+
+        setSelectedSessionId(sessionId);
+    }
+
+    function toggleAllSessionSelection(): void {
+        setSelectedSessionIds((current) => {
+            const allSelected =
+                sessions.length > 0 &&
+                sessions.every((session) => current.has(session.id));
+            return allSelected
+                ? new Set()
+                : new Set(sessions.map((session) => session.id));
+        });
+    }
+
+    function openBatchDeleteDialog(): void {
+        if (selectedSessionIds.size === 0) {
+            return;
+        }
+
+        setBatchDeleteDialogOpen(true);
+    }
+
+    function closeBatchDeleteDialog(): void {
+        if (busyAction === "batch-delete") {
+            return;
+        }
+
+        setBatchDeleteDialogOpen(false);
+    }
+
+    async function handleBatchDelete(): Promise<void> {
+        const sessionIds = Array.from(selectedSessionIds);
+        if (sessionIds.length === 0) {
+            setBatchDeleteDialogOpen(false);
+            return;
+        }
+
+        setBusyAction("batch-delete");
+
+        try {
+            const result = await window.lyPerf.deleteSessions(sessionIds);
+            const deletedIds = new Set(result.deletedIds);
+            setBatchDeleteDialogOpen(false);
+            setSelectedSessionIds((current) => {
+                const next = new Set(current);
+                for (const sessionId of deletedIds) {
+                    next.delete(sessionId);
+                }
+                return next;
+            });
+
+            if (deletedIds.has(selectedSessionId)) {
+                setSelectedSessionId("");
+                setSessionDetail(null);
+                setExportResult(null);
+                setEventErrorMessage(null);
+            }
+
+            await reloadSessions();
+
+            if (result.failures.length > 0) {
+                const firstFailure = result.failures[0];
+                showFeedback(
+                    "error",
+                    `已删除 ${result.deletedIds.length} 项，${result.failures.length} 项失败。${firstFailure.message}`
+                );
+            } else {
+                showFeedback(
+                    "success",
+                    `已删除 ${result.deletedIds.length} 个历史会话。`
+                );
+            }
+        } catch (error) {
+            showFeedback(
+                "error",
+                getErrorMessage(error, "批量删除历史会话失败。")
+            );
         } finally {
             setBusyAction(null);
         }
@@ -349,6 +525,7 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
     return {
         sessions,
         selectedSessionId,
+        selectedSessionIds,
         sessionDetail,
         exportResult,
         feedback,
@@ -361,8 +538,9 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         renameDialogOpen,
         renameDialogError,
         deleteDialogOpen,
+        batchDeleteDialogOpen,
         reloadSessions,
-        setSelectedSessionId,
+        selectSession,
         handleExport,
         openRenameDialog,
         closeRenameDialog,
@@ -370,6 +548,10 @@ export function useReportsRuntime(): UseReportsRuntimeResult {
         openDeleteDialog,
         closeDeleteDialog,
         handleDelete,
+        toggleAllSessionSelection,
+        openBatchDeleteDialog,
+        closeBatchDeleteDialog,
+        handleBatchDelete,
         handleCreateEvent,
         handleUpdateEvent,
         handleDeleteEvent

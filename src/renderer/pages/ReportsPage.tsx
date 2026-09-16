@@ -13,6 +13,7 @@ export function ReportsPage() {
     const {
         sessions,
         selectedSessionId,
+        selectedSessionIds,
         sessionDetail,
         exportResult,
         feedback,
@@ -25,8 +26,9 @@ export function ReportsPage() {
         renameDialogOpen,
         renameDialogError,
         deleteDialogOpen,
+        batchDeleteDialogOpen,
         reloadSessions,
-        setSelectedSessionId,
+        selectSession,
         handleExport,
         openRenameDialog,
         closeRenameDialog,
@@ -34,6 +36,10 @@ export function ReportsPage() {
         openDeleteDialog,
         closeDeleteDialog,
         handleDelete,
+        toggleAllSessionSelection,
+        openBatchDeleteDialog,
+        closeBatchDeleteDialog,
+        handleBatchDelete,
         handleUpdateEvent,
         handleDeleteEvent
     } = useReportsRuntime();
@@ -42,7 +48,8 @@ export function ReportsPage() {
         refreshing ||
         busyAction !== null ||
         renameDialogOpen ||
-        deleteDialogOpen;
+        deleteDialogOpen ||
+        batchDeleteDialogOpen;
     const latestMetrics =
         sessionDetail?.samples[sessionDetail.samples.length - 1]?.metrics;
     const {
@@ -81,10 +88,13 @@ export function ReportsPage() {
             <ReportsSessionList
                 sessions={sessions}
                 selectedSessionId={selectedSessionId}
+                selectedSessionIds={selectedSessionIds}
                 controlsDisabled={controlsDisabled}
                 refreshing={refreshing}
                 onRefresh={() => void reloadSessions()}
-                onSelectSession={setSelectedSessionId}
+                onSelectSession={selectSession}
+                onToggleAllSessionSelection={toggleAllSessionSelection}
+                onBatchDelete={openBatchDeleteDialog}
             />
 
             <div className={styles.content}>
@@ -163,6 +173,8 @@ export function ReportsPage() {
                     renameDialogOpen={renameDialogOpen}
                     renameDialogError={renameDialogError}
                     deleteDialogOpen={deleteDialogOpen}
+                    batchDeleteDialogOpen={batchDeleteDialogOpen}
+                    batchDeleteCount={selectedSessionIds.size}
                     busyAction={busyAction}
                     onCancelRename={closeRenameDialog}
                     onConfirmRename={(value) => {
@@ -171,6 +183,10 @@ export function ReportsPage() {
                     onCancelDelete={closeDeleteDialog}
                     onConfirmDelete={() => {
                         void handleDelete();
+                    }}
+                    onCancelBatchDelete={closeBatchDeleteDialog}
+                    onConfirmBatchDelete={() => {
+                        void handleBatchDelete();
                     }}
                 />
             </div>

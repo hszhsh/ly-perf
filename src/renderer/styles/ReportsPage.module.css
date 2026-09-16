@@ -18,7 +18,9 @@
   flex-direction: column;
   padding: 10px;
   gap: 10px;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .headerRow {
@@ -32,6 +34,28 @@
   font-size: 15px;
 }
 
+.batchActions {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.batchActions span {
+  color: #8fa2b8;
+  font-size: 12px;
+}
+
+.batchDeleteButton:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+
+.batchActions,
+.sessionList {
+  min-width: 0;
+}
+
 .sessionList {
   list-style: none;
   padding: 0;
@@ -40,15 +64,36 @@
   gap: 8px;
 }
 
+.sessionListItem {
+  display: block;
+  min-width: 0;
+}
+
+.sessionListItemSelected {
+  display: block;
+  min-width: 0;
+  border-radius: 8px;
+}
+
 .sessionBtn,
 .sessionActive {
   width: 100%;
+  min-width: 0;
   text-align: left;
   display: grid;
   gap: 2px;
 }
 
 .sessionActive {
+  border-color: rgba(130, 199, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(130, 199, 255, 0.45) inset;
+}
+
+.sessionBatchSelected {
+  border-color: rgba(203, 213, 225, 0.9);
+}
+
+.sessionActive.sessionBatchSelected {
   border-color: rgba(130, 199, 255, 0.9);
   box-shadow: 0 0 0 1px rgba(130, 199, 255, 0.45) inset;
 }
@@ -64,6 +109,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.sessionTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sessionMeta {

@@ -6,20 +6,33 @@ import styles from "@renderer/styles/ReportsPage.module.css";
 interface ReportsSessionListProps {
     sessions: SessionSummary[];
     selectedSessionId: string;
+    selectedSessionIds: ReadonlySet<string>;
     controlsDisabled: boolean;
     refreshing: boolean;
     onRefresh: () => void;
-    onSelectSession: (sessionId: string) => void;
+    onSelectSession: (
+        sessionId: string,
+        mode: "replace" | "toggle" | "range"
+    ) => void;
+    onToggleAllSessionSelection: () => void;
+    onBatchDelete: () => void;
 }
 
 export function ReportsSessionList({
     sessions,
     selectedSessionId,
+    selectedSessionIds,
     controlsDisabled,
     refreshing,
     onRefresh,
-    onSelectSession
+    onSelectSession,
+    onToggleAllSessionSelection,
+    onBatchDelete
 }: ReportsSessionListProps) {
+    const allSelected =
+        sessions.length > 0 &&
+        sessions.every((session) => selectedSessionIds.has(session.id));
+
     return (
         <aside className={styles.sidebar}>
             <div className={styles.headerRow}>
@@ -33,22 +46,61 @@ export function ReportsSessionList({
                 </button>
             </div>
 
+            <div className={styles.batchActions}>
+                <button
+                    type="button"
+                    disabled={controlsDisabled || sessions.length === 0}
+                    onClick={onToggleAllSessionSelection}
+                >
+                    {allSelected ? "取消全选" : "全选"}
+                </button>
+                <span>已选 {selectedSessionIds.size} 项</span>
+                <button
+                    type="button"
+                    className={styles.batchDeleteButton}
+                    disabled={controlsDisabled || selectedSessionIds.size === 0}
+                    onClick={onBatchDelete}
+                >
+                    批量删除
+                </button>
+            </div>
+
             <ul className={styles.sessionList}>
                 {sessions.length === 0 ? (
                     <li className={styles.empty}>暂无历史会话</li>
                 ) : null}
 
                 {sessions.map((session) => (
-                    <li key={session.id}>
+                    <li
+                        key={session.id}
+                        className={
+                            selectedSessionIds.has(session.id)
+                                ? styles.sessionListItemSelected
+                                : styles.sessionListItem
+                        }
+                    >
                         <button
                             type="button"
                             disabled={controlsDisabled}
+                            aria-pressed={selectedSessionIds.has(session.id)}
                             className={
-                                selectedSessionId === session.id
-                                    ? styles.sessionActive
-                                    : styles.sessionBtn
+                                selectedSessionId === session.id &&
+                                selectedSessionIds.has(session.id)
+                                    ? `${styles.sessionActive} ${styles.sessionBatchSelected}`
+                                    : selectedSessionId === session.id
+                                      ? styles.sessionActive
+                                      : selectedSessionIds.has(session.id)
+                                        ? `${styles.sessionBtn} ${styles.sessionBatchSelected}`
+                                        : styles.sessionBtn
                             }
-                            onClick={() => onSelectSession(session.id)}
+                            onClick={(event) => {
+                                const mode = event.shiftKey
+                                    ? "range"
+                                    : event.ctrlKey
+                                      ? "toggle"
+                                      : "replace";
+                                onSelectSession(session.id, mode);
+                            }}
                         >
                             <div className={styles.sessionTitleRow}>
                                 <div className={styles.sessionTitle}>

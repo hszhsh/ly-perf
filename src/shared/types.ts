@@ -280,6 +280,16 @@ export interface SessionSummary {
     persistenceState: SessionPersistenceState;
 }
 
+export interface DeleteSessionsFailure {
+    sessionId: string;
+    message: string;
+}
+
+export interface DeleteSessionsResult {
+    deletedIds: string[];
+    failures: DeleteSessionsFailure[];
+}
+
 export interface SessionDetail extends SessionSummary {
     config: MonitorConfig;
     deviceInfo: DeviceInfo;
@@ -346,6 +356,7 @@ export interface LyPerfApi {
         displayName: string
     ) => Promise<SessionDetail>;
     deleteSession: (sessionId: string) => Promise<void>;
+    deleteSessions: (sessionIds: string[]) => Promise<DeleteSessionsResult>;
     exportSession: (
         sessionId: string,
         format: "html" | "xlsx" | "csv"
