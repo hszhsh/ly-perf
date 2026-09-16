@@ -11,6 +11,10 @@ LY Perf 是一个面向 Android 应用性能分析的桌面客户端，基于 El
 - 支持历史会话查看、重命名、删除与导出
 - 支持历史样本图表分析与截图回看
 
+## 界面预览
+
+![LY Perf 实时监控界面](docs/images/monitor-overview.png)
+
 ## 技术栈
 
 - Electron
